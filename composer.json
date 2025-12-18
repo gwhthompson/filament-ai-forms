@@ -18,7 +18,7 @@
         }
     ],
     "require": {
-        "php": "^8.2",
+        "php": "^8.3",
         "filament/filament": "^4.0",
         "openai-php/laravel": "^0.18",
         "spatie/laravel-data": "^4.0",

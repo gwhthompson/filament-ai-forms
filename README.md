@@ -19,7 +19,7 @@ You describe what each field represents. The model fills them in. Your existing 
 
 ## Requirements
 
-- PHP 8.2+
+- PHP 8.3+
 - Laravel 11+
 - Filament v4.0+
 - OpenAI API key
