@@ -8,3 +8,4 @@
 /phpstan.neon       export-ignore
 /.pint.json         export-ignore
 /coverage           export-ignore
+/composer.lock      export-ignore
