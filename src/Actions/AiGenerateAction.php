@@ -1,0 +1,710 @@
+<?php
+
+declare(strict_types=1);
+
+namespace Gwhthompson\FilamentAiForms\Actions;
+
+use Closure;
+use Filament\Actions\Action;
+use Filament\Forms\Components\Checkbox;
+use Filament\Forms\Components\Hidden;
+use Filament\Infolists\Components\TextEntry;
+use Filament\Infolists\Components\ViewEntry;
+use Filament\Notifications\Notification;
+use Filament\Schemas\Components\Component;
+use Filament\Schemas\Components\Grid;
+use Filament\Schemas\Components\Section;
+use Filament\Schemas\Components\Wizard\Step;
+use Filament\Support\Icons\Heroicon;
+use Gwhthompson\FilamentAiForms\Data\AiFieldMetadata;
+use Gwhthompson\FilamentAiForms\Data\AiGenerationConfig;
+use Gwhthompson\FilamentAiForms\Services\AiFormGenerationService;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\HtmlString;
+use Override;
+use Throwable;
+
+/**
+ * Generic Filament action for AI-powered form generation.
+ *
+ * This action provides a 3-step wizard where users can:
+ * 1. Select which fields to generate using AI
+ * 2. Watch AI generation progress
+ * 3. Review and accept/reject suggestions
+ *
+ * Usage:
+ * ```php
+ * AiGenerateAction::make()
+ *     ->aiModel('gpt-4.1-mini')
+ *     ->systemPrompt('You are a specialist...')
+ *     ->contextProvider(fn($action) => ['url' => $action->getRecord()->website])
+ * ```
+ */
+class AiGenerateAction extends Action
+{
+    protected ?string $aiModel = null;
+
+    protected ?float $temperature = null;
+
+    protected ?int $maxTokens = null;
+
+    protected ?string $systemPrompt = null;
+
+    protected ?bool $useWebSearch = null;
+
+    protected ?bool $logEnabled = null;
+
+    protected ?string $logPath = null;
+
+    protected ?Closure $beforeGeneration = null;
+
+    protected ?Closure $afterGeneration = null;
+
+    protected ?Closure $onOptionsResolution = null;
+
+    protected ?Closure $contextProvider = null;
+
+    public static function getDefaultName(): ?string
+    {
+        return 'aiGenerate';
+    }
+
+    #[Override]
+    protected function setUp(): void
+    {
+        parent::setUp();
+
+        $this->label(fn (): string => $this->isEditPage() ? 'Optimise using AI' : 'Generate using AI')
+            ->icon(Heroicon::Sparkles)
+            ->color('primary')
+            ->visible(fn (): bool => $this->shouldBeVisible())
+            ->steps(fn (): array => $this->getWizardSteps())
+            ->modalWidth('5xl')
+            ->modalHeading(fn (): string => $this->isEditPage() ? 'Optimise Form with AI' : 'Generate Form with AI')
+            ->action(function (array $data): mixed {
+                /** @var array<string, mixed> $data */
+                return $this->handleAction($data);
+            });
+    }
+
+    /** Configure AI model (e.g., 'gpt-4.1-mini', 'gpt-4o'). */
+    public function aiModel(string $model): static
+    {
+        $this->aiModel = $model;
+
+        return $this;
+    }
+
+    /** Configure temperature. */
+    public function temperature(float $temperature): static
+    {
+        $this->temperature = $temperature;
+
+        return $this;
+    }
+
+    /** Configure max tokens. */
+    public function maxTokens(int $maxTokens): static
+    {
+        $this->maxTokens = $maxTokens;
+
+        return $this;
+    }
+
+    /** Configure system prompt. */
+    public function systemPrompt(string $prompt): static
+    {
+        $this->systemPrompt = $prompt;
+
+        return $this;
+    }
+
+    /** Configure web search. */
+    public function useWebSearch(bool $enabled = true): static
+    {
+        $this->useWebSearch = $enabled;
+
+        return $this;
+    }
+
+    /** Configure logging. */
+    public function logEnabled(bool $enabled = true): static
+    {
+        $this->logEnabled = $enabled;
+
+        return $this;
+    }
+
+    /** Configure log path. */
+    public function logPath(string $path): static
+    {
+        $this->logPath = $path;
+
+        return $this;
+    }
+
+    /** Hook called before generation starts. */
+    public function beforeGeneration(Closure $callback): static
+    {
+        $this->beforeGeneration = $callback;
+
+        return $this;
+    }
+
+    /** Hook called after generation completes. */
+    public function afterGeneration(Closure $callback): static
+    {
+        $this->afterGeneration = $callback;
+
+        return $this;
+    }
+
+    /**
+     * Hook for resolving field options (e.g., tags, enums).
+     *
+     * Callback receives field name and should return array of options or null.
+     */
+    public function onOptionsResolution(Closure $callback): static
+    {
+        $this->onOptionsResolution = $callback;
+
+        return $this;
+    }
+
+    /**
+     * Hook for providing custom context.
+     *
+     * Callback receives action instance and should return context array.
+     */
+    public function contextProvider(Closure $callback): static
+    {
+        $this->contextProvider = $callback;
+
+        return $this;
+    }
+
+    /** Check if action should be visible. */
+    protected function shouldBeVisible(): bool
+    {
+        // Always visible on Create page
+        // On Edit page, implement custom visibility logic via closure if needed
+        return $this->isEditPage();
+    }
+
+    /** Check if we're on an Edit page. */
+    protected function isEditPage(): bool
+    {
+        $livewire = $this->getLivewire();
+
+        return $livewire !== null && method_exists($livewire, 'getRecord') && $livewire->getRecord() !== null;
+    }
+
+    /**
+     * Get the 3-step wizard configuration.
+     *
+     * @return array<int, Step>
+     */
+    protected function getWizardSteps(): array
+    {
+        return [
+            // Step 1: Field Selection
+            Step::make('select')
+                ->key('ai-field-selection-step')
+                ->label('Select Fields')
+                ->description('Choose which fields to generate using AI')
+                ->schema(fn (): array => $this->getFieldSelectionSchema())
+                ->afterValidation(function (array $state, callable $set): void {
+                    // Count selected fields
+                    /** @var array<string, mixed> $state */
+                    $selected = collect($state)
+                        ->filter(fn (mixed $value, string $key): bool => str_starts_with($key, 'field_') && $value === true)
+                        ->count();
+
+                    if ($selected === 0) {
+                        Notification::make()
+                            ->warning()
+                            ->title('No fields selected')
+                            ->body('Please select at least one field to generate.')
+                            ->send();
+
+                        $this->halt();
+                    }
+
+                    // Perform AI generation
+                    $this->performAiGeneration($state, $set);
+                }),
+
+            // Step 2: Review & Accept
+            Step::make('review')
+                ->key('ai-review-step')
+                ->label('Review')
+                ->description('Review and accept generated content')
+                ->schema(fn (callable $get): array => $this->getReviewSchema($get)),
+        ];
+    }
+
+    /**
+     * Get field selection schema for Step 1.
+     *
+     * @return array<int, mixed>
+     */
+    protected function getFieldSelectionSchema(): array
+    {
+        $aiFields = $this->extractFieldMetadata();
+        $existingData = $this->getExistingData();
+        $this->isEditPage();
+
+        $schema = [];
+
+        // Select All / Deselect All action
+        /** @var view-string $selectButtonsView */
+        $selectButtonsView = 'filament-ai-forms::actions.partials.select-all-buttons';
+        $schema[] = ViewEntry::make('select_actions')
+            ->hiddenLabel()
+            ->view($selectButtonsView);
+
+        foreach ($aiFields as $aiField) {
+            $fieldName = $aiField->name;
+            $currentValue = $existingData[$fieldName] ?? null;
+            $hasValue = ! empty($currentValue);
+
+            $description = $aiField->description ?? 'No description available';
+            $statusBadge = $hasValue
+                ? '<span class="text-success-600 dark:text-success-400">✓ Has value</span>'
+                : '<span class="text-gray-500">Empty</span>';
+
+            $schema[] = Checkbox::make("field_{$fieldName}")
+                ->label($aiField->label)
+                ->helperText(new HtmlString($description.'<br><small>'.$statusBadge.'</small>'))
+                ->default(! $hasValue) // Auto-select empty fields
+                ->live();
+        }
+
+        return $schema;
+    }
+
+    /**
+     * Perform AI generation and store results in form state.
+     *
+     * @param  array<string, mixed>  $state
+     */
+    protected function performAiGeneration(array $state, callable $set): void
+    {
+        try {
+            // Get context (URL, etc.)
+            $context = $this->getContext();
+
+            // Execute before hook if defined
+            if ($this->beforeGeneration instanceof Closure) {
+                ($this->beforeGeneration)($context);
+            }
+
+            // Extract selected field names
+            /** @var array<int, string> $selectedFields */
+            $selectedFields = collect($state)
+                ->filter(fn (mixed $value, string $key): bool => str_starts_with($key, 'field_') && $value === true)
+                ->keys()
+                ->map(fn (string $key): string => str_replace('field_', '', $key))
+                ->values()
+                ->all();
+
+            // Get components
+            $components = $this->extractComponents();
+
+            // Build configuration with proper type guards for config() returns
+            $modelConfig = config('filament-ai-forms.model', 'gpt-4.1-mini');
+            $tempConfig = config('filament-ai-forms.temperature', 0.05);
+            $tokensConfig = config('filament-ai-forms.max_output_tokens', 3000);
+            $webSearchConfig = config('filament-ai-forms.web_search.enabled', true);
+            $logEnabledConfig = config('filament-ai-forms.logging.enabled', true);
+            $logPathConfig = config('filament-ai-forms.logging.path', '');
+
+            $config = AiGenerationConfig::from([
+                'model' => $this->aiModel ?? (is_string($modelConfig) ? $modelConfig : 'gpt-4.1-mini'),
+                'temperature' => $this->temperature ?? (is_numeric($tempConfig) ? (float) $tempConfig : 0.05),
+                'maxTokens' => $this->maxTokens ?? (is_numeric($tokensConfig) ? (int) $tokensConfig : 3000),
+                'systemPrompt' => $this->systemPrompt,
+                'useWebSearch' => $this->useWebSearch ?? (is_bool($webSearchConfig) ? $webSearchConfig : true),
+                'logEnabled' => $this->logEnabled ?? (is_bool($logEnabledConfig) ? $logEnabledConfig : true),
+                'logPath' => $this->logPath ?? (is_string($logPathConfig) ? $logPathConfig : ''),
+            ]);
+
+            // Call AI service
+            $service = app(AiFormGenerationService::class);
+
+            $result = $service->generate(
+                config: $config,
+                components: $components,
+                context: $context,
+                selectedFields: $selectedFields
+            );
+
+            // Execute after hook if defined
+            if ($this->afterGeneration instanceof Closure) {
+                ($this->afterGeneration)($result);
+            }
+
+            // Store generated data in form state for review step
+            $set('generated_data', json_encode($result->data));
+            $set('selected_fields', json_encode($selectedFields));
+
+            // Pre-populate checkbox states so Alpine.js buttons can find them
+            // (->default() alone doesn't register keys in $wire.mountedActions[0].data)
+            foreach ($selectedFields as $fieldName) {
+                if (array_key_exists($fieldName, $result->data)) {
+                    $set("accept_{$fieldName}", true);
+                }
+            }
+
+            Log::info('AI generation completed successfully', [
+                'field_count' => $result->fieldsGenerated,
+                'duration' => $result->duration,
+            ]);
+        } catch (Throwable $throwable) {
+            Log::error('AI generation failed', [
+                'error' => $throwable->getMessage(),
+                'error_class' => $throwable::class,
+            ]);
+
+            $userMessage = match (true) {
+                str_contains($throwable->getMessage(), 'OpenAI') => 'AI service error: '.$throwable->getMessage(),
+                str_contains($throwable->getMessage(), 'timeout') => 'The AI service took too long to respond. Please try again.',
+                str_contains($throwable->getMessage(), 'JSON') => 'Failed to parse AI response. Please try again.',
+                default => 'An unexpected error occurred: '.$throwable->getMessage(),
+            };
+
+            Notification::make()
+                ->danger()
+                ->title('AI Generation Failed')
+                ->body($userMessage)
+                ->persistent()
+                ->send();
+
+            $this->halt();
+        }
+    }
+
+    /**
+     * Get review schema for Step 3.
+     *
+     * @return array<int, mixed>
+     */
+    protected function getReviewSchema(callable $get): array
+    {
+        $generatedDataJson = $get('generated_data');
+        $selectedFieldsJson = $get('selected_fields');
+
+        if (empty($generatedDataJson) || empty($selectedFieldsJson)) {
+            return [
+                TextEntry::make('no_data')
+                    ->hiddenLabel()
+                    ->state('No generated data available. Please go back and try again.'),
+            ];
+        }
+
+        $generatedDataString = is_string($generatedDataJson) ? $generatedDataJson : '';
+        $selectedFieldsString = is_string($selectedFieldsJson) ? $selectedFieldsJson : '';
+
+        /** @var array<string, mixed>|null $generatedData */
+        $generatedData = json_decode($generatedDataString, true);
+        /** @var array<int, string>|null $selectedFields */
+        $selectedFields = json_decode($selectedFieldsString, true);
+        $existingData = $this->getExistingData();
+        $fields = $this->extractFieldMetadata();
+
+        $schema = [];
+
+        // Hidden fields to persist data through wizard steps
+        $schema[] = Hidden::make('generated_data')
+            ->default($generatedDataJson);
+
+        $schema[] = Hidden::make('selected_fields')
+            ->default($selectedFieldsJson);
+
+        // Accept All / Reject All buttons at top
+        /** @var view-string $acceptRejectView */
+        $acceptRejectView = 'filament-ai-forms::actions.partials.accept-reject-buttons';
+        $schema[] = ViewEntry::make('accept_all_action')
+            ->hiddenLabel()
+            ->view($acceptRejectView);
+
+        if (! is_array($selectedFields) || ! is_array($generatedData)) {
+            return $schema;
+        }
+
+        foreach ($selectedFields as $selectedField) {
+            if (! is_string($selectedField)) {
+                continue;
+            }
+
+            if (! array_key_exists($selectedField, $generatedData)) {
+                continue;
+            }
+
+            $fieldMeta = collect($fields)->firstWhere('name', $selectedField);
+            $label = $fieldMeta !== null ? $fieldMeta->label : $selectedField;
+            $generatedValue = $generatedData[$selectedField];
+            $existingValue = $existingData[$selectedField] ?? null;
+
+            // Create diff display
+            $schema[] = Section::make((string) $label)
+                ->schema([
+                    Grid::make(2)
+                        ->schema([
+                            // Current value
+                            TextEntry::make('current_'.$selectedField)
+                                ->label('Current')
+                                ->state($this->formatValue($existingValue))
+                                ->html(),
+
+                            // Generated value
+                            TextEntry::make('generated_'.$selectedField)
+                                ->label('AI Generated')
+                                ->state($this->formatValue($generatedValue))
+                                ->html(),
+                        ]),
+
+                    // Accept checkbox
+                    Checkbox::make('accept_'.$selectedField)
+                        ->label('Accept this generated value')
+                        ->default(true)
+                        ->live(),
+                ]);
+        }
+
+        return $schema;
+    }
+
+    /** Format a value for display in the review interface. */
+    protected function formatValue(mixed $value): string
+    {
+        if (empty($value)) {
+            return '<span class="italic text-gray-400 dark:text-gray-600">Empty</span>';
+        }
+
+        if (is_array($value)) {
+            return collect($value)
+                ->map(function (mixed $item): string {
+                    $itemString = is_scalar($item) ? (string) $item : '';
+
+                    return '<span class="inline-flex items-center rounded-full bg-primary-100 px-2 py-0.5 text-xs font-medium text-primary-800 dark:bg-primary-900 dark:text-primary-100">'.htmlspecialchars($itemString).'</span>';
+                })
+                ->join(' ');
+        }
+
+        $valueString = is_scalar($value) ? (string) $value : '';
+
+        return '<div class="whitespace-pre-wrap">'.htmlspecialchars($valueString).'</div>';
+    }
+
+    /**
+     * Handle the final action - apply accepted changes to parent form.
+     *
+     * @param  array<string, mixed>  $data
+     */
+    protected function handleAction(array $data): mixed
+    {
+        $generatedDataJson = $data['generated_data'] ?? null;
+        $selectedFieldsJson = $data['selected_fields'] ?? null;
+
+        if (empty($generatedDataJson) || empty($selectedFieldsJson)) {
+            Notification::make()
+                ->warning()
+                ->title('No data to apply')
+                ->send();
+
+            return null;
+        }
+
+        $generatedDataString = is_string($generatedDataJson) ? $generatedDataJson : '';
+        $selectedFieldsString = is_string($selectedFieldsJson) ? $selectedFieldsJson : '';
+
+        $generatedData = json_decode($generatedDataString, true);
+        $selectedFields = json_decode($selectedFieldsString, true);
+
+        if (! is_array($generatedData) || ! is_array($selectedFields)) {
+            return null;
+        }
+
+        $livewire = $this->getLivewire();
+
+        if ($livewire === null) {
+            return null;
+        }
+
+        // Build array of accepted fields to apply
+        /** @var array<string, mixed> $dataToApply */
+        $dataToApply = collect($selectedFields)
+            ->filter(
+                fn (mixed $fieldName): bool => is_string($fieldName)
+                    && ($data['accept_'.$fieldName] ?? false) === true
+                    && array_key_exists($fieldName, $generatedData)
+            )
+            ->mapWithKeys(
+                fn (mixed $fieldName): array => [(string) $fieldName => $generatedData[(string) $fieldName]]
+            )
+            ->toArray();
+
+        if (empty($dataToApply)) {
+            Notification::make()
+                ->info()
+                ->title('No changes to apply')
+                ->body('Please accept at least one field to update the form.')
+                ->send();
+
+            return null;
+        }
+
+        // Apply changes to parent form using Filament's form API
+        $form = property_exists($livewire, 'form') ? $livewire->form : null;
+
+        if ($form !== null && is_object($form) && method_exists($form, 'fill')) {
+            $form->fill($dataToApply);
+        } elseif (property_exists($livewire, 'data') && is_array($livewire->data)) {
+            // Fallback to direct mutation
+            foreach ($dataToApply as $fieldName => $value) {
+                $livewire->data[$fieldName] = $value;
+            }
+        }
+
+        Notification::make()
+            ->success()
+            ->title('Changes applied')
+            ->body(sprintf(
+                'Applied %d AI-generated field%s to the form.',
+                count($dataToApply),
+                count($dataToApply) === 1 ? '' : 's'
+            ))
+            ->send();
+
+        return null;
+    }
+
+    /**
+     * Get context for generation (URL, domain, custom data).
+     *
+     * @return array<string, mixed>
+     */
+    #[Override]
+    public function getContext(): array
+    {
+        // Use custom context provider if defined
+        if ($this->contextProvider instanceof Closure) {
+            $result = ($this->contextProvider)($this);
+
+            if (is_array($result)) {
+                /** @var array<string, mixed> $result */
+                return $result;
+            }
+
+            /** @var array<string, mixed> */
+            return [];
+        }
+
+        /** @var array<string, mixed> */
+        return [];
+    }
+
+    /**
+     * Get existing data from the form (current state, not database state).
+     *
+     * @return array<string, mixed>
+     */
+    protected function getExistingData(): array
+    {
+        $livewire = $this->getLivewire();
+
+        if ($livewire === null) {
+            return [];
+        }
+
+        // Get current form state (includes unsaved changes)
+        if (property_exists($livewire, 'data') && is_array($livewire->data)) {
+            /** @var array<string, mixed> */
+            return $livewire->data;
+        }
+
+        // Fallback to record data if form data not available
+        if ($this->isEditPage() && method_exists($livewire, 'getRecord')) {
+            $record = $livewire->getRecord();
+
+            if ($record !== null && is_object($record) && method_exists($record, 'toArray')) {
+                $data = $record->toArray();
+
+                /** @var array<string, mixed> */
+                return is_array($data) ? $data : [];
+            }
+        }
+
+        return [];
+    }
+
+    /**
+     * Extract AI-enabled components from parent form.
+     *
+     * @return array<int, Component>
+     */
+    protected function extractComponents(): array
+    {
+        $livewire = $this->getLivewire();
+
+        if ($livewire === null) {
+            return [];
+        }
+
+        $form = $livewire->form ?? null;
+
+        if ($form === null || ! is_object($form) || ! method_exists($form, 'getFlatComponents')) {
+            Log::warning('AiGenerateAction: Form property is null');
+
+            return [];
+        }
+
+        $components = $form->getFlatComponents();
+
+        if (! is_iterable($components)) {
+            return [];
+        }
+
+        /** @var array<int, mixed> $componentArray */
+        $componentArray = is_array($components) ? $components : iterator_to_array($components);
+
+        /** @var array<int, Component> */
+        return collect($componentArray)
+            ->filter(function (mixed $component): bool {
+                return $component instanceof Component && $component->isAiEnabled();
+            })
+            ->values()
+            ->all();
+    }
+
+    /**
+     * Extract field metadata for UI display purposes.
+     *
+     * @return array<int, AiFieldMetadata>
+     */
+    protected function extractFieldMetadata(): array
+    {
+        $components = $this->extractComponents();
+
+        return collect($components)
+            ->map(
+                function (Component $component): AiFieldMetadata {
+                    $schema = $component->getAiSchema();
+                    $description = is_array($schema) ? ($schema['description'] ?? null) : null;
+                    $prompt = is_array($schema) ? ($schema['prompt'] ?? null) : null;
+                    $examples = is_array($schema) ? ($schema['examples'] ?? []) : [];
+
+                    return AiFieldMetadata::from([
+                        'name' => $component->getName(),
+                        'label' => $component->getLabel() ?? $component->getName(),
+                        'description' => is_string($description) ? $description : null,
+                        'prompt' => is_string($prompt) ? $prompt : null,
+                        'examples' => is_array($examples) ? $examples : [],
+                    ]);
+                }
+            )
+            ->values()
+            ->all();
+    }
+}

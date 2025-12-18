@@ -1,0 +1,67 @@
+{
+    "name": "gwhthompson/filament-ai-forms",
+    "description": "AI-powered form generation for Filament v4 using OpenAI structured outputs",
+    "keywords": [
+        "laravel",
+        "filament",
+        "openai",
+        "ai",
+        "forms",
+        "structured-outputs"
+    ],
+    "homepage": "https://github.com/gwhthompson/filament-ai-forms",
+    "license": "MIT",
+    "authors": [
+        {
+            "name": "George Thompson",
+            "role": "Developer"
+        }
+    ],
+    "require": {
+        "php": "^8.2",
+        "filament/filament": "^4.0",
+        "openai-php/laravel": "^0.18",
+        "spatie/laravel-data": "^4.0",
+        "spatie/laravel-package-tools": "^1.16"
+    },
+    "require-dev": {
+        "larastan/larastan": "^3.0",
+        "laravel/pint": "^1.0",
+        "orchestra/testbench": "^10.0",
+        "pestphp/pest": "^4.0",
+        "pestphp/pest-plugin-livewire": "^4.0",
+        "phpunit/phpcov": "^11.0"
+    },
+    "autoload": {
+        "psr-4": {
+            "Gwhthompson\\FilamentAiForms\\": "src/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "Gwhthompson\\FilamentAiForms\\Tests\\": "tests/"
+        }
+    },
+    "scripts": {
+        "analyse": "vendor/bin/phpstan analyse",
+        "format": "vendor/bin/pint",
+        "format:blade": "npm run format",
+        "test": "vendor/bin/pest",
+        "test:coverage": "vendor/bin/pest --coverage --coverage-clover clover.xml"
+    },
+    "config": {
+        "sort-packages": true,
+        "allow-plugins": {
+            "pestphp/pest-plugin": true
+        }
+    },
+    "extra": {
+        "laravel": {
+            "providers": [
+                "Gwhthompson\\FilamentAiForms\\FilamentAiFormsServiceProvider"
+            ]
+        }
+    },
+    "minimum-stability": "dev",
+    "prefer-stable": true
+}

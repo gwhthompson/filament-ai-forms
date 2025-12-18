@@ -1,0 +1,9 @@
+<livewire:filament-ai-forms::ai-chat-interface
+    wire:model.live="aiChatContent"
+    :$currentContent
+    :$initialPrompt
+    :$systemPrompt
+    :$contextPrompt
+    :$identifier
+    :key="$identifier"
+/>

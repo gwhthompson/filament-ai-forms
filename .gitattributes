@@ -1,0 +1,10 @@
+# Ignore dev files in production distribution
+/.github            export-ignore
+/.gitattributes     export-ignore
+/.gitignore         export-ignore
+/.claude            export-ignore
+/tests              export-ignore
+/phpunit.xml        export-ignore
+/phpstan.neon       export-ignore
+/.pint.json         export-ignore
+/coverage           export-ignore

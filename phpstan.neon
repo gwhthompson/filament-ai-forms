@@ -1,0 +1,23 @@
+includes:
+    - vendor/larastan/larastan/extension.neon
+
+parameters:
+    level: max
+    paths:
+        - src
+    excludePaths:
+        - tests
+    reportUnmatchedIgnoredErrors: false
+    treatPhpDocTypesAsCertain: false
+    ignoreErrors:
+        # AiSchemaMixin methods are registered at runtime via Component::mixin()
+        # PHPStan cannot resolve these dynamically added methods
+        - message: '#Call to an undefined method Filament\\Schemas\\Components\\Component::(isAiEnabled|getAiDescription|getAiPrompt|getAiRequired|getAiExamples|getAiPattern|getAiSchema|getName|getLabel|getValidationRules|getStateCasts)\(\)#'
+          reportUnmatched: false
+        # Component::getName() returns mixed at runtime but we know it's string
+        - message: '#Possibly invalid array key type mixed#'
+          path: src/Services/FilamentToAiSchemaMapper.php
+          reportUnmatched: false
+        - message: '#Binary operation "." between .* and mixed results in an error#'
+          path: src/Services/FilamentToAiSchemaMapper.php
+          reportUnmatched: false

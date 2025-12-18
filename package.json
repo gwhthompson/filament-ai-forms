@@ -1,0 +1,11 @@
+{
+    "private": true,
+    "scripts": {
+        "format": "prettier --write 'resources/**/*.blade.php'"
+    },
+    "devDependencies": {
+        "prettier": "^3.4.2",
+        "prettier-plugin-blade": "^2.1.21",
+        "prettier-plugin-tailwindcss": "^0.7.0"
+    }
+}
