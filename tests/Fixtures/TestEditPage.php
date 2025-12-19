@@ -6,9 +6,12 @@ namespace Gwhthompson\FilamentAiForms\Tests\Fixtures;
 
 use Filament\Resources\Pages\EditRecord;
 use Gwhthompson\FilamentAiForms\Actions\AiGenerateAction;
+use Gwhthompson\FilamentAiForms\Tests\Concerns\ResetsFilamentState;
 
 class TestEditPage extends EditRecord
 {
+    use ResetsFilamentState;
+
     protected static string $resource = TestResource::class;
 
     /**

@@ -4,11 +4,11 @@ declare(strict_types=1);
 
 namespace Gwhthompson\FilamentAiForms\Tests\Fixtures;
 
-use Filament\Resources\Pages\CreateRecord;
+use Filament\Resources\Pages\EditRecord;
 use Gwhthompson\FilamentAiForms\Actions\AiGenerateAction;
 use Gwhthompson\FilamentAiForms\Tests\Concerns\ResetsFilamentState;
 
-class TestCreatePage extends CreateRecord
+class TestEditPageWithHooks extends EditRecord
 {
     use ResetsFilamentState;
 
@@ -20,7 +20,9 @@ class TestCreatePage extends CreateRecord
     protected function getHeaderActions(): array
     {
         return [
-            AiGenerateAction::make(),
+            AiGenerateAction::make()
+                ->beforeGeneration(app('test.beforeGeneration'))
+                ->afterGeneration(app('test.afterGeneration')),
         ];
     }
 }

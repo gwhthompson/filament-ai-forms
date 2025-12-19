@@ -58,6 +58,22 @@ trait MocksOpenAi
     }
 
     /**
+     * Mock the OpenAI client with an incomplete response but no details.
+     *
+     * Tests the fallback to 'unknown' when incompleteDetails is missing.
+     */
+    protected function mockOpenAiIncompleteNoDetails(): void
+    {
+        OpenAI::fake([
+            CreateResponse::fake([
+                'status' => 'incomplete',
+                'incomplete_details' => null,
+                'output' => [],
+            ], strategy: OverrideStrategy::Replace),
+        ]);
+    }
+
+    /**
      * Mock the OpenAI client with null content (empty output).
      */
     protected function mockOpenAiNullContent(): void
@@ -88,6 +104,35 @@ trait MocksOpenAi
                             [
                                 'type' => 'output_text',
                                 'text' => '',
+                                'annotations' => [],
+                            ],
+                        ],
+                    ],
+                ],
+            ], strategy: OverrideStrategy::Replace),
+        ]);
+    }
+
+    /**
+     * Mock the OpenAI client with non-array JSON response.
+     *
+     * Used to test the case where valid JSON is returned but it's not an object/array.
+     */
+    protected function mockOpenAiNonArrayJson(string $jsonValue = '"just a string"'): void
+    {
+        OpenAI::fake([
+            CreateResponse::fake([
+                'status' => 'completed',
+                'output' => [
+                    [
+                        'type' => 'message',
+                        'id' => 'msg_test_'.uniqid(),
+                        'status' => 'completed',
+                        'role' => 'assistant',
+                        'content' => [
+                            [
+                                'type' => 'output_text',
+                                'text' => $jsonValue,
                                 'annotations' => [],
                             ],
                         ],
@@ -171,8 +216,8 @@ trait MocksOpenAi
     {
         $id = 'resp_67c9fdcecf488190bdd9a0409de3a1ec07b8b0ad4e5eb654';
         $msgId = 'msg_67c9fdcf37fc8190ba82116e33fb28c507b8b0ad4e5eb654';
-        // Escape content for JSON embedding
-        $escapedContent = addslashes($content);
+        // Properly escape content for JSON embedding (handles newlines, tabs, unicode, etc.)
+        $escapedContent = trim(json_encode($content), '"');
 
         return implode("\n", [
             'data: {"type":"response.created","response":{"id":"'.$id.'","object":"response","created_at":1741290958,"status":"in_progress","error":null,"incomplete_details":null,"instructions":"You are a helpful assistant.","max_output_tokens":null,"model":"gpt-4o-2024-08-06","output":[],"parallel_tool_calls":true,"previous_response_id":null,"reasoning":{"effort":null,"summary":null},"store":true,"temperature":1.0,"text":{"format":{"type":"text"}},"tool_choice":"auto","tools":[],"top_p":1.0,"truncation":"disabled","usage":null,"user":null,"metadata":{}}}',

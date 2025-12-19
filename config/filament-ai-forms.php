@@ -62,17 +62,4 @@ return [
         'enabled' => env('AI_FORMS_LOGGING', true),
         'path' => storage_path('logs/ai-generation'),
     ],
-
-    /*
-    |--------------------------------------------------------------------------
-    | Retry Configuration
-    |--------------------------------------------------------------------------
-    |
-    | Settings for automatic retry on validation failures.
-    |
-    */
-    'retry' => [
-        'max_attempts' => 2,
-        'validate_schema' => true,
-    ],
 ];

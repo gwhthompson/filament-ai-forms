@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 use Gwhthompson\FilamentAiForms\Livewire\AiChatInterface;
 use Gwhthompson\FilamentAiForms\Tests\Traits\MocksOpenAi;
+use OpenAI\Laravel\Facades\OpenAI;
+use OpenAI\Resources\Responses;
 
 use function Pest\Livewire\livewire;
 
@@ -379,6 +381,33 @@ describe('AiChatInterface', function (): void {
                 ->set('messages', $messages)
                 ->call('startStreaming')
                 ->assertDispatched('ai-content-generated');
+        });
+
+        it('prepends contextPrompt as first user message in API call', function (): void {
+            $this->mockOpenAiStreamSuccess('Response with context');
+
+            $messages = [
+                ['role' => 'user', 'content' => 'Tell me more', 'timestamp' => now()->toIso8601String()],
+            ];
+
+            livewire(AiChatInterface::class, ['contextPrompt' => 'You are helping edit a product description.'])
+                ->set('messages', $messages)
+                ->call('startStreaming')
+                ->assertSet('content', 'Response with context');
+
+            // Verify contextPrompt was prepended as first user message
+            OpenAI::assertSent(Responses::class, function (string $method, array $params): bool {
+                if ($method !== 'createStreamed') {
+                    return false;
+                }
+
+                $input = $params['input'] ?? [];
+
+                // First message should be the contextPrompt
+                return isset($input[0])
+                    && $input[0]['role'] === 'user'
+                    && $input[0]['content'] === 'You are helping edit a product description.';
+            });
         });
     });
 });

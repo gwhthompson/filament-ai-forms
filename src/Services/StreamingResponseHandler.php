@@ -77,6 +77,11 @@ class StreamingResponseHandler
     /** Flush output buffers for real-time streaming. */
     protected function flush(): void
     {
+        // Skip flushing in testing environment to avoid output pollution
+        if (app()->environment('testing')) {
+            return;
+        }
+
         if (function_exists('ob_flush')) {
             @ob_flush();
         }

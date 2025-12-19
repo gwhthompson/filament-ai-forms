@@ -331,6 +331,19 @@ describe('edge cases and error handling', function (): void {
             ->toThrow(InvalidArgumentException::class, 'has no options for enum schema');
     });
 
+    it('throws exception for checkbox list with no options', function (): void {
+        $mapper = app(FilamentToAiSchemaMapper::class);
+
+        $components = [
+            \Filament\Forms\Components\CheckboxList::make('empty_tags')
+                ->options([])
+                ->aiSchema(enabled: true),
+        ];
+
+        expect(fn () => $mapper->buildOpenAiConfig($components))
+            ->toThrow(InvalidArgumentException::class, 'has no options for enum array schema');
+    });
+
     it('handles select with callable options', function (): void {
         $mapper = app(FilamentToAiSchemaMapper::class);
 
@@ -380,6 +393,53 @@ describe('nullable types', function (): void {
         // Type stays as string (not array with null)
         expect($config['schema']['properties']['required_status']['type'])
             ->toBe('string');
+    });
+
+    it('makes checkbox list nullable when nullable rule is present', function (): void {
+        $mapper = app(FilamentToAiSchemaMapper::class);
+
+        $components = [
+            \Filament\Forms\Components\CheckboxList::make('optional_tags')
+                ->options(['php' => 'PHP', 'js' => 'JavaScript'])
+                ->rules(['nullable'])
+                ->aiSchema(enabled: true, required: false),
+        ];
+
+        $config = $mapper->buildOpenAiConfig($components);
+
+        expect($config['schema']['properties']['optional_tags']['type'])
+            ->toBe(['array', 'null']);
+    });
+
+    it('makes checkbox nullable when nullable rule is present', function (): void {
+        $mapper = app(FilamentToAiSchemaMapper::class);
+
+        $components = [
+            Checkbox::make('optional_flag')
+                ->rules(['nullable'])
+                ->aiSchema(enabled: true, required: false),
+        ];
+
+        $config = $mapper->buildOpenAiConfig($components);
+
+        expect($config['schema']['properties']['optional_flag']['type'])
+            ->toBe(['boolean', 'null']);
+    });
+
+    it('makes numeric field nullable when nullable rule is present', function (): void {
+        $mapper = app(FilamentToAiSchemaMapper::class);
+
+        $components = [
+            TextInput::make('optional_quantity')
+                ->numeric()
+                ->rules(['nullable'])
+                ->aiSchema(enabled: true, required: false),
+        ];
+
+        $config = $mapper->buildOpenAiConfig($components);
+
+        expect($config['schema']['properties']['optional_quantity']['type'])
+            ->toBe(['number', 'null']);
     });
 });
 

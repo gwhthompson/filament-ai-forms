@@ -15,6 +15,7 @@ use Filament\Schemas\Components\Component;
 use Filament\Schemas\Components\Grid;
 use Filament\Schemas\Components\Section;
 use Filament\Schemas\Components\Wizard\Step;
+use Filament\Schemas\Contracts\HasSchemas;
 use Filament\Support\Icons\Heroicon;
 use Gwhthompson\FilamentAiForms\Data\AiFieldMetadata;
 use Gwhthompson\FilamentAiForms\Data\AiGenerationConfig;
@@ -429,6 +430,11 @@ class AiGenerateAction extends Action
             ->view($acceptRejectView);
 
         if (! is_array($selectedFields) || ! is_array($generatedData)) {
+            $schema[] = TextEntry::make('error_state')
+                ->hiddenLabel()
+                ->state('AI generation data is corrupted. Please close this modal and try again.')
+                ->color('danger');
+
             return $schema;
         }
 
@@ -523,6 +529,12 @@ class AiGenerateAction extends Action
         $selectedFields = json_decode($selectedFieldsString, true);
 
         if (! is_array($generatedData) || ! is_array($selectedFields)) {
+            Notification::make()
+                ->danger()
+                ->title('Data corrupted')
+                ->body('AI generation data is corrupted. Please try again.')
+                ->send();
+
             return null;
         }
 
@@ -555,16 +567,9 @@ class AiGenerateAction extends Action
             return null;
         }
 
-        // Apply changes to parent form using Filament's form API
-        $form = property_exists($livewire, 'form') ? $livewire->form : null;
-
-        if ($form !== null && is_object($form) && method_exists($form, 'fill')) {
-            $form->fill($dataToApply);
-        } elseif (property_exists($livewire, 'data') && is_array($livewire->data)) {
-            // Fallback to direct mutation
-            foreach ($dataToApply as $fieldName => $value) {
-                $livewire->data[$fieldName] = $value;
-            }
+        // Apply changes using Filament's partial fill API
+        if ($livewire instanceof HasSchemas) {
+            $livewire->getSchema('form')?->fillPartially($dataToApply, array_keys($dataToApply));
         }
 
         Notification::make()
@@ -618,25 +623,8 @@ class AiGenerateAction extends Action
             return [];
         }
 
-        // Get current form state (includes unsaved changes)
-        if (property_exists($livewire, 'data') && is_array($livewire->data)) {
-            /** @var array<string, mixed> */
-            return $livewire->data;
-        }
-
-        // Fallback to record data if form data not available
-        if ($this->isEditPage() && method_exists($livewire, 'getRecord')) {
-            $record = $livewire->getRecord();
-
-            if ($record !== null && is_object($record) && method_exists($record, 'toArray')) {
-                $data = $record->toArray();
-
-                /** @var array<string, mixed> */
-                return is_array($data) ? $data : [];
-            }
-        }
-
-        return [];
+        /** @var array<string, mixed> */
+        return $livewire->data ?? [];
     }
 
     /**
@@ -648,29 +636,15 @@ class AiGenerateAction extends Action
     {
         $livewire = $this->getLivewire();
 
-        if ($livewire === null) {
+        if ($livewire === null || ! $livewire instanceof HasSchemas) {
             return [];
         }
 
-        $form = $livewire->form ?? null;
-
-        if ($form === null || ! is_object($form) || ! method_exists($form, 'getFlatComponents')) {
-            Log::warning('AiGenerateAction: Form property is null');
-
-            return [];
-        }
-
-        $components = $form->getFlatComponents();
-
-        if (! is_iterable($components)) {
-            return [];
-        }
-
-        /** @var array<int, mixed> $componentArray */
-        $componentArray = is_array($components) ? $components : iterator_to_array($components);
+        $form = $livewire->getSchema('form');
+        assert($form !== null, 'EditRecord always has a form schema');
 
         /** @var array<int, Component> */
-        return collect($componentArray)
+        return collect($form->getFlatComponents())
             ->filter(function (mixed $component): bool {
                 return $component instanceof Component && $component->isAiEnabled();
             })

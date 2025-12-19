@@ -19,6 +19,7 @@ use Gwhthompson\FilamentAiForms\FilamentAiFormsServiceProvider;
 use Gwhthompson\FilamentAiForms\Tests\Fixtures\AdminPanelProvider;
 use Gwhthompson\FilamentAiForms\Tests\Fixtures\TestUser;
 use Illuminate\Foundation\Testing\LazilyRefreshDatabase;
+use Livewire\Livewire;
 use Livewire\LivewireServiceProvider;
 use Orchestra\Testbench\TestCase as Orchestra;
 use RyanChandler\BladeCaptureDirective\BladeCaptureDirectiveServiceProvider;
@@ -38,6 +39,23 @@ abstract class TestCase extends Orchestra
 
         // Authenticate user for panel tests
         $this->actingAs(TestUser::factory()->create());
+    }
+
+    protected function tearDown(): void
+    {
+        // Flush Livewire state to prevent test pollution
+        // See: https://github.com/livewire/livewire/issues/2489
+        Livewire::flushState();
+
+        // Force garbage collection to release WeakMap references
+        // This ensures Filament's DataStore entries are cleared between tests
+        gc_collect_cycles();
+
+        // Reset the DataStore mechanism with a fresh instance
+        $dataStore = new \Livewire\Mechanisms\DataStore;
+        $dataStore->register();
+
+        parent::tearDown();
     }
 
     /**
@@ -100,10 +118,6 @@ abstract class TestCase extends Orchestra
             'logging' => [
                 'enabled' => true,
                 'path' => sys_get_temp_dir().'/filament-ai-forms-test-logs',
-            ],
-            'retry' => [
-                'max_attempts' => 2,
-                'validate_schema' => true,
             ],
         ]);
     }

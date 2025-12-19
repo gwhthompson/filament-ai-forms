@@ -144,4 +144,30 @@ describe('FilamentAiFormsPlugin', function (): void {
                 ->and($plugin->getWebSearchCountry())->toBe('US');
         });
     });
+
+    describe('boot method', function (): void {
+        it('can be booted with a panel', function (): void {
+            $plugin = FilamentAiFormsPlugin::make();
+            $panel = Mockery::mock(\Filament\Panel::class);
+
+            // Should complete without throwing
+            $plugin->boot($panel);
+
+            expect(true)->toBeTrue();
+        });
+    });
+
+    describe('static get method', function (): void {
+        it('retrieves plugin from filament container', function (): void {
+            // Initialize the panel context by mounting a Livewire component
+            $record = \Gwhthompson\FilamentAiForms\Tests\Fixtures\TestModel::factory()->create();
+
+            \Pest\Livewire\livewire(\Gwhthompson\FilamentAiForms\Tests\Fixtures\TestEditPage::class, ['record' => $record->id])
+                ->assertStatus(200);
+
+            $plugin = FilamentAiFormsPlugin::get();
+
+            expect($plugin)->toBeInstanceOf(FilamentAiFormsPlugin::class);
+        });
+    });
 });

@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use Filament\Forms\Components\Checkbox;
+use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Concerns\InteractsWithForms;
 use Filament\Forms\Contracts\HasForms;
@@ -48,6 +49,10 @@ function getFormComponents(): array
                         ->aiSchema(enabled: true, required: false),
                     Checkbox::make('is_active')
                         ->aiSchema(enabled: true),
+                    Select::make('optional_status')
+                        ->options(['active' => 'Active', 'inactive' => 'Inactive'])
+                        ->nullable()
+                        ->aiSchema(enabled: true, required: false),
                 ])
                 ->statePath('data');
         }
@@ -126,5 +131,15 @@ describe('Form Component Integration', function (): void {
         $config = $mapper->buildOpenAiConfig($components);
 
         expect($config['schema']['properties']['is_active']['type'])->toBe('boolean');
+    });
+
+    it('makes select nullable when nullable validation is set', function (): void {
+        $components = getFormComponents();
+
+        $mapper = app(FilamentToAiSchemaMapper::class);
+        $config = $mapper->buildOpenAiConfig($components);
+
+        expect($config['schema']['properties']['optional_status']['type'])
+            ->toBe(['string', 'null']);
     });
 });

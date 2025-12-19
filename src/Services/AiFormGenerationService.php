@@ -66,29 +66,11 @@ class AiFormGenerationService
                 userPrompt: $userPrompt
             );
 
-            // Call OpenAI API with retry for length violations
-            $maxRetriesConfig = config('filament-ai-forms.retry.max_attempts', 2);
-            $maxRetries = is_numeric($maxRetriesConfig) ? (int) $maxRetriesConfig : 2;
-            $response = $this->generateWithRetry($requestParams, $schemaConfig['schema'], maxRetries: $maxRetries);
+            // Call OpenAI API (validates response completeness)
+            $response = $this->callOpenAi($requestParams);
 
-            // Check for incomplete response
-            $status = property_exists($response, 'status') ? $response->status : null;
-            if ($status === 'incomplete') {
-                $incompleteDetails = property_exists($response, 'incompleteDetails') ? $response->incompleteDetails : null;
-                $reason = 'unknown';
-                if (is_object($incompleteDetails) && property_exists($incompleteDetails, 'reason')) {
-                    $reasonValue = $incompleteDetails->reason;
-                    $reason = is_scalar($reasonValue) ? (string) $reasonValue : 'unknown';
-                }
-                throw new RuntimeException('OpenAI response incomplete: '.$reason);
-            }
-
-            // Extract and decode content
-            $content = property_exists($response, 'outputText') ? $response->outputText : null;
-
-            if ($content === null || $content === '') {
-                throw new RuntimeException('OpenAI returned no content');
-            }
+            // Extract and decode content (already validated as non-empty by callOpenAi)
+            $content = property_exists($response, 'outputText') ? $response->outputText : '';
 
             $contentString = is_scalar($content) ? (string) $content : '';
             $data = json_decode($contentString, true, 512, JSON_THROW_ON_ERROR);
@@ -315,161 +297,46 @@ class AiFormGenerationService
     }
 
     /**
-     * Generate with automatic retry for schema violations.
+     * Call OpenAI API and validate the response.
+     *
+     * OpenAI Structured Outputs enforces schema at the API level,
+     * so we only need to check for incomplete/empty responses.
      *
      * @param  array<string, mixed>  $requestParams
-     * @param  array<string, mixed>  $schema
      */
-    protected function generateWithRetry(array $requestParams, array $schema, int $maxRetries = 2): object
+    protected function callOpenAi(array $requestParams): object
     {
-        $attempt = 0;
-        $validateSchemaConfig = config('filament-ai-forms.retry.validate_schema', true);
-        $validateSchema = is_bool($validateSchemaConfig) ? $validateSchemaConfig : true;
+        $response = OpenAI::responses()->create($requestParams);
 
-        while ($attempt <= $maxRetries) {
-            $response = OpenAI::responses()->create($requestParams);
-
-            // Check if response is incomplete
-            $status = property_exists($response, 'status') ? $response->status : null;
-            if ($status === 'incomplete') {
-                $incompleteDetails = property_exists($response, 'incompleteDetails') ? $response->incompleteDetails : null;
-                $reason = 'unknown';
-                if (is_object($incompleteDetails) && property_exists($incompleteDetails, 'reason')) {
-                    $reasonValue = $incompleteDetails->reason;
-                    $reason = is_scalar($reasonValue) ? (string) $reasonValue : 'unknown';
-                }
-                throw new RuntimeException('OpenAI response incomplete: '.$reason);
+        // Check if response is incomplete
+        $status = property_exists($response, 'status') ? $response->status : null;
+        if ($status === 'incomplete') {
+            $incompleteDetails = property_exists($response, 'incompleteDetails') ? $response->incompleteDetails : null;
+            $reason = 'unknown';
+            if (is_object($incompleteDetails) && property_exists($incompleteDetails, 'reason')) {
+                $reasonValue = $incompleteDetails->reason;
+                $reason = is_scalar($reasonValue) ? (string) $reasonValue : 'unknown';
             }
-
-            // Extract and validate content
-            $content = property_exists($response, 'outputText') ? $response->outputText : null;
-
-            if ($content === null || $content === '') {
-                throw new RuntimeException('OpenAI returned no content');
-            }
-
-            $contentString = is_scalar($content) ? (string) $content : '';
-            $data = json_decode($contentString, true, 512, JSON_THROW_ON_ERROR);
-
-            // Skip validation if disabled
-            if (! $validateSchema) {
-                return $response;
-            }
-
-            // Validate against schema constraints
-            /** @var array<string, mixed> $data */
-            $violations = is_array($data) ? $this->validateSchemaConstraints($data, $schema) : ['Invalid JSON structure'];
-
-            if ($violations === []) {
-                // No violations - return successful response
-                return $response;
-            }
-
-            // Log violations and retry if attempts remaining
-            $attempt++;
-
-            if ($attempt <= $maxRetries) {
-                Log::warning('Schema violations detected, retrying', [
-                    'attempt' => $attempt,
-                    'violations' => $violations,
-                ]);
-
-                // Add violation feedback to next request
-                $input = $requestParams['input'] ?? [];
-                if (is_array($input)) {
-                    $input[] = [
-                        'role' => 'user',
-                        'content' => [[
-                            'type' => 'input_text',
-                            'text' => 'Previous response had issues: '.implode(', ', $violations).'. Please regenerate following all constraints exactly.',
-                        ]],
-                    ];
-                    $requestParams['input'] = $input;
-                }
-            } else {
-                // Max retries exceeded - log and return anyway
-                Log::warning('Max retries exceeded, accepting response with violations', [
-                    'violations' => $violations,
-                ]);
-
-                return $response;
-            }
+            throw new RuntimeException('OpenAI response incomplete: '.$reason);
         }
 
-        throw new RuntimeException('Generation failed after retries');
-    }
+        // Validate content exists
+        $content = property_exists($response, 'outputText') ? $response->outputText : null;
 
-    /**
-     * Validate data against schema constraints.
-     *
-     * @param  array<string, mixed>  $data
-     * @param  array<string, mixed>  $schema
-     * @return array<int, string> List of violation messages
-     */
-    protected function validateSchemaConstraints(array $data, array $schema): array
-    {
-        $violations = [];
-        $properties = $schema['properties'] ?? [];
-
-        if (! is_array($properties)) {
-            return $violations;
+        if ($content === null || $content === '') {
+            throw new RuntimeException('OpenAI returned no content');
         }
 
-        foreach ($properties as $fieldName => $fieldSchema) {
-            if (! is_string($fieldName) || ! is_array($fieldSchema)) {
-                continue;
-            }
-
-            $value = $data[$fieldName] ?? null;
-
-            if ($value === null) {
-                continue;
-            }
-
-            // Check string constraints
-            $fieldType = $fieldSchema['type'] ?? null;
-            if ($fieldType === 'string' && is_string($value)) {
-                $length = strlen($value);
-
-                // Only validate length if constraints are defined
-                $minLength = isset($fieldSchema['minLength']) && is_int($fieldSchema['minLength']) ? $fieldSchema['minLength'] : null;
-                $maxLength = isset($fieldSchema['maxLength']) && is_int($fieldSchema['maxLength']) ? $fieldSchema['maxLength'] : null;
-
-                if ($minLength !== null && $length < $minLength) {
-                    $violations[] = $fieldName.' too short ('.$length.' < '.$minLength.' chars)';
-                }
-
-                if ($maxLength !== null && $length > $maxLength) {
-                    $violations[] = $fieldName.' too long ('.$length.' > '.$maxLength.' chars)';
-                }
-
-                // Only check capitalization/punctuation for fields with minLength (assume those are prose)
-                if ($minLength !== null && $minLength >= 50) {
-                    if (! preg_match('/^[A-Z]/', $value)) {
-                        $violations[] = $fieldName.' must start with capital letter';
-                    }
-
-                    if (! preg_match('/[.!?]$/', $value)) {
-                        $violations[] = $fieldName.' must end with punctuation';
-                    }
-                }
-            }
-        }
-
-        return $violations;
+        return $response;
     }
 
     /**
      * Build raw response metadata for logging.
      *
-     * @return array<string, mixed>|null
+     * @return array<string, mixed>
      */
-    protected function buildRawResponseMetadata(mixed $response): ?array
+    protected function buildRawResponseMetadata(object $response): array
     {
-        if (! is_object($response)) {
-            return null;
-        }
-
         return [
             'id' => $response->id ?? null,
             'model' => $response->model ?? null,

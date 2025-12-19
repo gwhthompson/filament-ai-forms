@@ -67,7 +67,7 @@ class FilamentToAiSchemaMapper
                 'required' => $required,
                 'additionalProperties' => false,
             ],
-            'systemPrompt' => $this->buildSystemPrompt([], $basePrompt),
+            'systemPrompt' => $this->buildSystemPrompt($basePrompt),
             'userPrompt' => '',
         ];
     }
@@ -273,20 +273,16 @@ class FilamentToAiSchemaMapper
     /** @return array<int, mixed> */
     protected function parseValidationRules(Component $component): array
     {
+        // Only called for form input components which always have getValidationRules()
+        assert(method_exists($component, 'getValidationRules'), 'AI schema should only be used on form input components');
+
+        /** @var array<string, array<int, mixed>> $rules */
         $rules = $component->getValidationRules();
 
-        // Handle string format: 'required|email|max:255'
-        if (is_string($rules)) {
-            return array_filter(explode('|', $rules));
-        }
-
-        // Handle array format: ['required', 'email', 'max:255']
-        if (! is_array($rules)) {
-            return [];
-        }
-
+        // Flatten the validation rules array
         /** @var array<int, mixed> */
         return collect($rules)
+            ->flatten()
             ->map(fn (mixed $rule): mixed => is_object($rule) ? $rule::class : $rule)
             ->filter()
             ->values()
@@ -312,62 +308,20 @@ class FilamentToAiSchemaMapper
     /** @return array<string|int, mixed> */
     protected function getEnumOptions(Component $component): array
     {
-        // Try to get options from the component
-        if (method_exists($component, 'getOptions')) {
-            $options = $component->getOptions();
+        // Only called for Select/Radio components which always have getOptions()
+        assert(method_exists($component, 'getOptions'), 'getEnumOptions should only be called on option-based components');
 
-            if (is_callable($options)) {
-                $options = $options();
-            }
-
-            /** @var array<string|int, mixed> */
-            return is_array($options) ? $options : [];
-        }
-
-        return [];
+        /** @var array<string|int, mixed> */
+        return $component->getOptions();
     }
 
-    /**
-     * @param  array<string, string>  $fieldDescriptions
-     * @param  array<string, array<int, string>>  $enumConstraints
-     */
-    protected function buildSystemPrompt(array $fieldDescriptions, string $basePrompt, array $enumConstraints = []): string
+    protected function buildSystemPrompt(string $basePrompt): string
     {
         $prompt = $basePrompt !== '' ? $basePrompt."\n\n" : '';
 
         $prompt .= 'Generate structured data according to the JSON schema provided. ';
         $prompt .= 'Ensure all required fields are populated with appropriate values. ';
         $prompt .= 'For text fields, use proper capitalization and punctuation.';
-
-        if ($fieldDescriptions !== []) {
-            $prompt .= "\n\nField guidance:\n";
-            foreach ($fieldDescriptions as $field => $description) {
-                $prompt .= "- {$field}: {$description}\n";
-            }
-        }
-
-        if ($enumConstraints !== []) {
-            $prompt .= "\n\nEnum constraints:\n";
-            foreach ($enumConstraints as $field => $options) {
-                $prompt .= "- {$field}: must be one of [".implode(', ', $options)."]\n";
-            }
-        }
-
-        return $prompt;
-    }
-
-    /** @param  array<string, string>  $fieldGuidance */
-    protected function buildUserPrompt(array $fieldGuidance): string
-    {
-        if ($fieldGuidance === []) {
-            return '';
-        }
-
-        $prompt = "Please pay special attention to the following guidance:\n\n";
-
-        foreach ($fieldGuidance as $field => $guidance) {
-            $prompt .= "- {$field}: {$guidance}\n";
-        }
 
         return $prompt;
     }
