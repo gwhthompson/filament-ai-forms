@@ -31,6 +31,7 @@ class FilamentAiFormsServiceProvider extends PackageServiceProvider
 
         // Register Livewire component with package namespace
         // Note: Component only loads when rendered, not on every page
-        Livewire::component('filament-ai-forms::ai-chat-interface', AiChatInterface::class);
+        // Using dot notation for Livewire 3 + 4 compatibility (:: requires namespace registration in Livewire 4)
+        Livewire::component('filament-ai-forms.ai-chat-interface', AiChatInterface::class);
     }
 }

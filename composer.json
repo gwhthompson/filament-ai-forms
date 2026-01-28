@@ -1,6 +1,6 @@
 {
     "name": "gwhthompson/filament-ai-forms",
-    "description": "AI-powered form generation for Filament v4 using OpenAI structured outputs",
+    "description": "AI-powered form generation for Filament v4/v5 using OpenAI structured outputs",
     "keywords": [
         "laravel",
         "filament",
@@ -19,7 +19,7 @@
     ],
     "require": {
         "php": "^8.3",
-        "filament/filament": "^4.0",
+        "filament/filament": "^4.0|^5.0",
         "openai-php/laravel": "^0.18",
         "spatie/laravel-data": "^4.0",
         "spatie/laravel-package-tools": "^1.16"
