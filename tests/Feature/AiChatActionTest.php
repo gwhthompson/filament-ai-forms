@@ -5,6 +5,8 @@ declare(strict_types=1);
 use Filament\Schemas\Components\Component;
 use Filament\Schemas\Components\Utilities\Set;
 use Gwhthompson\FilamentAiForms\Actions\AiChatAction;
+use Gwhthompson\FilamentAiForms\Agents\ChatStreamAgent;
+use Illuminate\Contracts\View\View;
 use Illuminate\Database\Eloquent\Model;
 use Livewire\Component as LivewireComponent;
 
@@ -304,13 +306,13 @@ describe('AiChatAction', function (): void {
 
             $view = $modalContent($livewire, $component, $model);
 
-            expect($view)->toBeInstanceOf(\Illuminate\Contracts\View\View::class)
+            expect($view)->toBeInstanceOf(View::class)
                 ->and($view->getName())->toBe('filament-ai-forms::actions.ai-chat-modal')
                 ->and($view->getData()['currentContent'])->toBe('Current field content')
                 ->and($view->getData()['systemPrompt'])->toBe('Custom system prompt')
                 ->and($view->getData()['initialPrompt'])->toBe('Custom initial prompt')
                 ->and($view->getData()['contextPrompt'])->toBe('Custom context prompt')
-                ->and($view->getData()['agentClass'])->toBe(\Gwhthompson\FilamentAiForms\Agents\ChatStreamAgent::class)
+                ->and($view->getData()['agentClass'])->toBe(ChatStreamAgent::class)
                 ->and($view->getData()['identifier'])->toBe('data.description.123');
         });
     });

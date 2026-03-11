@@ -8,13 +8,17 @@ declare(strict_types=1);
  * These tests exercise the wizard modal flow including field selection,
  * AI generation, and error handling.
  *
- * @see \Gwhthompson\FilamentAiForms\Tests\Concerns\ResetsFilamentState
+ * @see ResetsFilamentState
  */
 
 use Gwhthompson\FilamentAiForms\Actions\AiGenerateAction;
 use Gwhthompson\FilamentAiForms\Data\AiGenerationResult;
+use Gwhthompson\FilamentAiForms\Exceptions\AiResponseParseException;
+use Gwhthompson\FilamentAiForms\Exceptions\AiServiceTimeoutException;
 use Gwhthompson\FilamentAiForms\Services\AiFormGenerationService;
+use Gwhthompson\FilamentAiForms\Tests\Concerns\ResetsFilamentState;
 use Gwhthompson\FilamentAiForms\Tests\Fixtures\TestEditPage;
+use Gwhthompson\FilamentAiForms\Tests\Fixtures\TestEditPageWithHooks;
 use Gwhthompson\FilamentAiForms\Tests\Fixtures\TestModel;
 use Mockery\MockInterface;
 
@@ -112,8 +116,8 @@ it('handles service errors gracefully', function (string $exceptionClass, string
         ->assertActionHalted('aiGenerate');
 })->with([
     'general error' => [RuntimeException::class, 'AI API error'],
-    'timeout error' => [\Gwhthompson\FilamentAiForms\Exceptions\AiServiceTimeoutException::class, 'Connection timeout'],
-    'parse error' => [\Gwhthompson\FilamentAiForms\Exceptions\AiResponseParseException::class, 'Invalid JSON response'],
+    'timeout error' => [AiServiceTimeoutException::class, 'Connection timeout'],
+    'parse error' => [AiResponseParseException::class, 'Invalid JSON response'],
     'unexpected error' => [RuntimeException::class, 'Database connection failed'],
 ]);
 
@@ -258,7 +262,7 @@ it('executes beforeGeneration hook during generation', function (): void {
 
     $record = TestModel::factory()->create();
 
-    livewire(\Gwhthompson\FilamentAiForms\Tests\Fixtures\TestEditPageWithHooks::class, ['record' => $record->id])
+    livewire(TestEditPageWithHooks::class, ['record' => $record->id])
         ->mountAction('aiGenerate')
         ->fillForm(['field_name' => true])
         ->goToNextWizardStep()
@@ -312,7 +316,7 @@ it('executes afterGeneration hook with result', function (): void {
 
     $record = TestModel::factory()->create();
 
-    livewire(\Gwhthompson\FilamentAiForms\Tests\Fixtures\TestEditPageWithHooks::class, ['record' => $record->id])
+    livewire(TestEditPageWithHooks::class, ['record' => $record->id])
         ->mountAction('aiGenerate')
         ->fillForm(['field_name' => true])
         ->goToNextWizardStep()

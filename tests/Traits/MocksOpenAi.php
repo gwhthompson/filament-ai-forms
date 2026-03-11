@@ -6,6 +6,7 @@ namespace Gwhthompson\FilamentAiForms\Tests\Traits;
 
 use OpenAI\Laravel\Facades\OpenAI;
 use OpenAI\Responses\Responses\CreateResponse;
+use OpenAI\Responses\Responses\CreateStreamedResponse;
 use OpenAI\Testing\Enums\OverrideStrategy;
 
 trait MocksOpenAi
@@ -203,7 +204,7 @@ trait MocksOpenAi
         rewind($resource);
 
         OpenAI::fake([
-            \OpenAI\Responses\Responses\CreateStreamedResponse::fake($resource),
+            CreateStreamedResponse::fake($resource),
         ]);
     }
 

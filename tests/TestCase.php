@@ -18,10 +18,12 @@ use Filament\Widgets\WidgetsServiceProvider;
 use Gwhthompson\FilamentAiForms\FilamentAiFormsServiceProvider;
 use Gwhthompson\FilamentAiForms\Tests\Fixtures\AdminPanelProvider;
 use Gwhthompson\FilamentAiForms\Tests\Fixtures\TestUser;
+use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Testing\LazilyRefreshDatabase;
 use Laravel\Ai\AiServiceProvider;
 use Livewire\Livewire;
 use Livewire\LivewireServiceProvider;
+use Livewire\Mechanisms\DataStore;
 use Orchestra\Testbench\TestCase as Orchestra;
 use RyanChandler\BladeCaptureDirective\BladeCaptureDirectiveServiceProvider;
 use Spatie\LaravelData\LaravelDataServiceProvider;
@@ -35,7 +37,7 @@ abstract class TestCase extends Orchestra
         parent::setUp();
 
         // Ensure Livewire DataStore mechanism is registered as a singleton
-        $dataStore = new \Livewire\Mechanisms\DataStore;
+        $dataStore = new DataStore;
         $dataStore->register();
 
         // Authenticate user for panel tests
@@ -53,7 +55,7 @@ abstract class TestCase extends Orchestra
         gc_collect_cycles();
 
         // Reset the DataStore mechanism with a fresh instance
-        $dataStore = new \Livewire\Mechanisms\DataStore;
+        $dataStore = new DataStore;
         $dataStore->register();
 
         parent::tearDown();
@@ -86,7 +88,7 @@ abstract class TestCase extends Orchestra
     }
 
     /**
-     * @param  \Illuminate\Foundation\Application  $app
+     * @param  Application  $app
      */
     protected function defineEnvironment($app): void
     {

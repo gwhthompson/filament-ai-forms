@@ -158,7 +158,7 @@ describe('AiGenerationLogger', function (): void {
             $logger->logSummary($config, $result);
 
             Log::shouldHaveReceived('debug')
-                ->with('AI generation logged', \Mockery::on(fn ($context) => $context['fields_generated'] === 3
+                ->with('AI generation logged', Mockery::on(fn ($context) => $context['fields_generated'] === 3
                         && $context['duration'] === 2.5
                 ))
                 ->once();
@@ -186,7 +186,7 @@ describe('AiGenerationLogger', function (): void {
             expect($logPath)->toBeNull();
 
             Log::shouldHaveReceived('warning')
-                ->with('Failed to write AI generation log', \Mockery::type('array'))
+                ->with('Failed to write AI generation log', Mockery::type('array'))
                 ->once();
         });
     });

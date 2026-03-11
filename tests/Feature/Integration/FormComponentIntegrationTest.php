@@ -17,7 +17,7 @@ covers(FilamentToAiSchemaMapper::class);
 /**
  * Helper to get form components with proper container context.
  *
- * @return array<int, \Filament\Schemas\Components\Component>
+ * @return array<int, Filament\Schemas\Components\Component>
  */
 function getFormComponents(): array
 {

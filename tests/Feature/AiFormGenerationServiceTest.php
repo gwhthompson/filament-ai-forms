@@ -7,6 +7,7 @@ use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
 use Gwhthompson\FilamentAiForms\Agents\FormGenerationAgent;
 use Gwhthompson\FilamentAiForms\Data\AiGenerationConfig;
+use Gwhthompson\FilamentAiForms\Exceptions\AiServiceTimeoutException;
 use Gwhthompson\FilamentAiForms\Services\AiFormGenerationService;
 use Gwhthompson\FilamentAiForms\Tests\Traits\MocksAgent;
 
@@ -136,7 +137,7 @@ describe('AiFormGenerationService', function (): void {
         expect(fn () => $this->service->generate(
             config: $config,
             components: $components,
-        ))->toThrow(\Gwhthompson\FilamentAiForms\Exceptions\AiServiceTimeoutException::class);
+        ))->toThrow(AiServiceTimeoutException::class);
     });
 
     it('uses fallback prompt when no URL in context', function (): void {

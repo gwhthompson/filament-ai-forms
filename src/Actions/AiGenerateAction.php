@@ -175,7 +175,7 @@ class AiGenerateAction extends Action
             if ($pluginAgent !== null) {
                 return $pluginAgent;
             }
-        } catch (\Throwable) {
+        } catch (Throwable) {
             // No active panel (standalone use, tests) — fall through to config
         }
 

@@ -2,9 +2,14 @@
 
 declare(strict_types=1);
 
+use Filament\Panel;
+use Gwhthompson\FilamentAiForms\Actions\AiChatAction;
+use Gwhthompson\FilamentAiForms\Actions\AiGenerateAction;
 use Gwhthompson\FilamentAiForms\Agents\ChatStreamAgent;
 use Gwhthompson\FilamentAiForms\Agents\FormGenerationAgent;
 use Gwhthompson\FilamentAiForms\FilamentAiFormsPlugin;
+use Gwhthompson\FilamentAiForms\Tests\Fixtures\TestEditPage;
+use Gwhthompson\FilamentAiForms\Tests\Fixtures\TestModel;
 
 covers(FilamentAiFormsPlugin::class);
 
@@ -97,7 +102,7 @@ describe('FilamentAiFormsPlugin', function (): void {
     describe('boot method', function (): void {
         it('can be booted with a panel', function (): void {
             $plugin = FilamentAiFormsPlugin::make();
-            $panel = Mockery::mock(\Filament\Panel::class);
+            $panel = Mockery::mock(Panel::class);
 
             $plugin->boot($panel);
 
@@ -108,9 +113,9 @@ describe('FilamentAiFormsPlugin', function (): void {
     describe('static get method', function (): void {
         it('retrieves plugin from filament container', function (): void {
             // Initialize the panel context by mounting a Livewire component
-            $record = \Gwhthompson\FilamentAiForms\Tests\Fixtures\TestModel::factory()->create();
+            $record = TestModel::factory()->create();
 
-            \Pest\Livewire\livewire(\Gwhthompson\FilamentAiForms\Tests\Fixtures\TestEditPage::class, ['record' => $record->id])
+            \Pest\Livewire\livewire(TestEditPage::class, ['record' => $record->id])
                 ->assertStatus(200);
 
             $plugin = FilamentAiFormsPlugin::get();
@@ -121,10 +126,10 @@ describe('FilamentAiFormsPlugin', function (): void {
 
     describe('plugin agent config wired into actions', function (): void {
         it('AiGenerateAction resolves agent from plugin when set', function (): void {
-            $record = \Gwhthompson\FilamentAiForms\Tests\Fixtures\TestModel::factory()->create();
+            $record = TestModel::factory()->create();
 
             // Boot a panel so FilamentAiFormsPlugin::get() works
-            \Pest\Livewire\livewire(\Gwhthompson\FilamentAiForms\Tests\Fixtures\TestEditPage::class, ['record' => $record->id])
+            \Pest\Livewire\livewire(TestEditPage::class, ['record' => $record->id])
                 ->assertStatus(200);
 
             // Configure the plugin with a custom agent
@@ -132,19 +137,19 @@ describe('FilamentAiFormsPlugin', function (): void {
             $plugin->agent(FormGenerationAgent::class);
 
             // Create an action without explicit agent — should resolve from plugin
-            $action = \Gwhthompson\FilamentAiForms\Actions\AiGenerateAction::make();
+            $action = AiGenerateAction::make();
 
             // Use reflection to call the protected method
-            $method = new \ReflectionMethod($action, 'resolveAgentClass');
+            $method = new ReflectionMethod($action, 'resolveAgentClass');
 
             expect($method->invoke($action))->toBe(FormGenerationAgent::class);
         });
 
         it('AiChatAction resolves agent from plugin when set', function (): void {
-            $record = \Gwhthompson\FilamentAiForms\Tests\Fixtures\TestModel::factory()->create();
+            $record = TestModel::factory()->create();
 
             // Boot a panel so FilamentAiFormsPlugin::get() works
-            \Pest\Livewire\livewire(\Gwhthompson\FilamentAiForms\Tests\Fixtures\TestEditPage::class, ['record' => $record->id])
+            \Pest\Livewire\livewire(TestEditPage::class, ['record' => $record->id])
                 ->assertStatus(200);
 
             // Configure the plugin with a custom chat agent
@@ -152,7 +157,7 @@ describe('FilamentAiFormsPlugin', function (): void {
             $plugin->chatAgent(ChatStreamAgent::class);
 
             // Create an action without explicit agent — should resolve from plugin
-            $action = \Gwhthompson\FilamentAiForms\Actions\AiChatAction::make();
+            $action = AiChatAction::make();
 
             expect($action->getAgentClass())->toBe(ChatStreamAgent::class);
         });

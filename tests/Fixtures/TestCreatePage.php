@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Gwhthompson\FilamentAiForms\Tests\Fixtures;
 
+use Filament\Actions\Action;
 use Filament\Resources\Pages\CreateRecord;
 use Gwhthompson\FilamentAiForms\Actions\AiGenerateAction;
 use Gwhthompson\FilamentAiForms\Tests\Concerns\ResetsFilamentState;
@@ -15,7 +16,7 @@ class TestCreatePage extends CreateRecord
     protected static string $resource = TestResource::class;
 
     /**
-     * @return array<\Filament\Actions\Action>
+     * @return array<Action>
      */
     protected function getHeaderActions(): array
     {

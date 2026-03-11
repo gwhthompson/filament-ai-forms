@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use Filament\Forms\Components\Checkbox;
+use Filament\Forms\Components\CheckboxList;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
@@ -335,7 +336,7 @@ describe('edge cases and error handling', function (): void {
         $mapper = app(FilamentToAiSchemaMapper::class);
 
         $components = [
-            \Filament\Forms\Components\CheckboxList::make('empty_tags')
+            CheckboxList::make('empty_tags')
                 ->options([])
                 ->aiSchema(enabled: true),
         ];
@@ -399,7 +400,7 @@ describe('nullable types', function (): void {
         $mapper = app(FilamentToAiSchemaMapper::class);
 
         $components = [
-            \Filament\Forms\Components\CheckboxList::make('optional_tags')
+            CheckboxList::make('optional_tags')
                 ->options(['php' => 'PHP', 'js' => 'JavaScript'])
                 ->rules(['nullable'])
                 ->aiSchema(enabled: true, required: false),
@@ -497,7 +498,7 @@ describe('array constraints', function (): void {
         $mapper = app(FilamentToAiSchemaMapper::class);
 
         $components = [
-            \Filament\Forms\Components\CheckboxList::make('tags')
+            CheckboxList::make('tags')
                 ->options(['php' => 'PHP', 'js' => 'JavaScript', 'python' => 'Python'])
                 ->rules(['min:1'])
                 ->aiSchema(enabled: true),
@@ -512,7 +513,7 @@ describe('array constraints', function (): void {
         $mapper = app(FilamentToAiSchemaMapper::class);
 
         $components = [
-            \Filament\Forms\Components\CheckboxList::make('categories')
+            CheckboxList::make('categories')
                 ->options(['a' => 'Category A', 'b' => 'Category B', 'c' => 'Category C'])
                 ->rules(['max:3'])
                 ->aiSchema(enabled: true),
@@ -527,7 +528,7 @@ describe('array constraints', function (): void {
         $mapper = app(FilamentToAiSchemaMapper::class);
 
         $components = [
-            \Filament\Forms\Components\CheckboxList::make('skills')
+            CheckboxList::make('skills')
                 ->options(['php' => 'PHP', 'js' => 'JavaScript', 'python' => 'Python', 'go' => 'Go'])
                 ->rules(['min:2', 'max:4'])
                 ->aiSchema(enabled: true),
@@ -545,7 +546,7 @@ describe('nullable type arrays', function (): void {
         $mapper = app(FilamentToAiSchemaMapper::class);
 
         $components = [
-            \Filament\Forms\Components\CheckboxList::make('interests')
+            CheckboxList::make('interests')
                 ->options(['sports' => 'Sports', 'music' => 'Music', 'tech' => 'Technology'])
                 ->aiSchema(enabled: true),
         ];

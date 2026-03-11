@@ -6,6 +6,7 @@ namespace Gwhthompson\FilamentAiForms\Agents;
 
 use Gwhthompson\FilamentAiForms\Support\JsonSchemaConverter;
 use Illuminate\Contracts\JsonSchema\JsonSchema;
+use Illuminate\JsonSchema\Types\Type;
 use Laravel\Ai\Contracts\Agent;
 use Laravel\Ai\Contracts\HasStructuredOutput;
 use Laravel\Ai\Contracts\HasTools;
@@ -31,7 +32,7 @@ class FormGenerationAgent implements Agent, HasStructuredOutput, HasTools
     }
 
     /**
-     * @return array<string, \Illuminate\JsonSchema\Types\Type>
+     * @return array<string, Type>
      */
     public function schema(JsonSchema $schema): array
     {
