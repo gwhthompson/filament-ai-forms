@@ -5,48 +5,30 @@
 [![PHPStan](https://img.shields.io/badge/PHPStan-max-brightgreen.svg?style=flat-square)](https://phpstan.org/)
 [![License](https://img.shields.io/packagist/l/gwhthompson/filament-ai-forms.svg?style=flat-square)](https://packagist.org/packages/gwhthompson/filament-ai-forms)
 
-Use OpenAI to generate form field values in Filament v4.
+AI-powered form generation for Filament, built on the Laravel AI SDK.
 
-You describe what each field represents. The model fills them in. Your existing validation rules and field types become constraints that the model follows, so you always get valid data back.
-
-## Features
-
-- **Bulk generation** - Fill multiple fields at once, review before applying
-- **Field refinement** - Improve any field through a chat interface
-- **Type-safe output** - The model follows your field types and validation rules
-- **Web search** - Optionally fetch live data for up-to-date information
-- **Automatic retry** - Retries when the output fails validation
+Describe what each field represents with `aiSchema()`. An AI agent fills them in. Your field types and validation rules act as constraints, so you always get valid data back.
 
 ## Requirements
 
 - PHP 8.3+
 - Laravel 11+
-- Filament v4.0+
-- OpenAI API key
+- Filament v4+
+- [Laravel AI SDK](https://github.com/laravel/ai)
 
 ## Installation
-
-Install the package via Composer:
 
 ```bash
 composer require gwhthompson/filament-ai-forms
 ```
 
-Publish the configuration file:
+Publish the config file:
 
 ```bash
 php artisan vendor:publish --tag="filament-ai-forms-config"
 ```
 
-Add your OpenAI API key to `.env`:
-
-```env
-OPENAI_API_KEY=sk-your-api-key
-```
-
-## Panel Registration
-
-Register the plugin in your Filament panel provider:
+Register the plugin in your panel provider:
 
 ```php
 use Gwhthompson\FilamentAiForms\FilamentAiFormsPlugin;
@@ -54,35 +36,32 @@ use Gwhthompson\FilamentAiForms\FilamentAiFormsPlugin;
 public function panel(Panel $panel): Panel
 {
     return $panel
-        ->plugin(
-            FilamentAiFormsPlugin::make()
-                ->model('gpt-4o')
-                ->temperature(0.05)
-                ->webSearch(true)
-                ->webSearchCountry('US')
-        );
+        ->plugin(FilamentAiFormsPlugin::make());
 }
 ```
 
 ## Quick Start
 
-Add the `aiSchema()` method to any form field to enable generation:
+Mark fields with `aiSchema()` and add `AiGenerateAction` to your page:
 
 ```php
-TextInput::make('name')
-    ->aiSchema(description: 'The company name')
-
-Textarea::make('description')
-    ->aiSchema(
-        description: 'A marketing description of the business',
-        prompt: 'Write 2-3 sentences'
-    )
-```
-
-Then add the generate action to your page:
-
-```php
+use Filament\Forms\Components\TextInput;
+use Filament\Forms\Components\Textarea;
 use Gwhthompson\FilamentAiForms\Actions\AiGenerateAction;
+
+public static function form(Form $form): Form
+{
+    return $form->schema([
+        TextInput::make('name')
+            ->aiSchema(description: 'The company name'),
+
+        Textarea::make('description')
+            ->aiSchema(
+                description: 'A marketing description',
+                prompt: 'Write 2-3 sentences',
+            ),
+    ]);
+}
 
 protected function getHeaderActions(): array
 {
@@ -92,95 +71,85 @@ protected function getHeaderActions(): array
 }
 ```
 
-## Schema Parameters
+The action opens a wizard: select fields, generate, review, then accept or reject each value.
 
-| Parameter | Type | Default | |
-|-----------|------|---------|---|
-| `enabled` | bool | `true` | Enable or disable generation for this field |
+## Configuration
+
+```php
+// config/filament-ai-forms.php
+
+return [
+    'agents' => [
+        'generation' => env('AI_FORMS_GENERATION_AGENT'),
+        'chat' => env('AI_FORMS_CHAT_AGENT'),
+    ],
+    'logging' => [
+        'enabled' => env('AI_FORMS_LOGGING', true),
+        'path' => storage_path('logs/ai-generation'),
+    ],
+];
+```
+
+| Env var | Purpose |
+|---------|---------|
+| `AI_FORMS_GENERATION_AGENT` | Agent class for bulk generation |
+| `AI_FORMS_CHAT_AGENT` | Agent class for chat refinement |
+| `AI_FORMS_LOGGING` | Enable/disable generation logging (default: `true`) |
+
+You can also set agents on the plugin directly:
+
+```php
+FilamentAiFormsPlugin::make()
+    ->agent(MyGenerationAgent::class)
+    ->chatAgent(MyChatAgent::class)
+```
+
+## aiSchema Parameters
+
+| Parameter | Type | Default | Purpose |
+|-----------|------|---------|---------|
+| `enabled` | bool | `true` | Enable/disable generation for this field |
 | `description` | string | `null` | What this field represents |
-| `prompt` | string | `null` | Instructions for the model |
-| `required` | bool | `true` | Whether the model must fill this field |
-| `examples` | array | `[]` | Example values to guide the output |
+| `prompt` | string | `null` | Instructions for the agent |
+| `required` | bool | `true` | Whether the agent must fill this field |
+| `examples` | array | `[]` | Example values to guide output |
 | `pattern` | string | `null` | Regex pattern constraint |
 
-## Full Example
+## AiGenerateAction
+
+Bulk-generate multiple fields at once. Add it as a header action or form action.
+
+| Method | Purpose |
+|--------|---------|
+| `agent(string\|Closure)` | Custom agent class |
+| `systemPrompt(string\|Closure)` | System instructions |
+| `contextProvider(Closure)` | Pass context data (URLs, etc.) |
+| `beforeGeneration(Closure)` | Pre-generation hook |
+| `afterGeneration(Closure)` | Post-generation hook |
+| `logEnabled(bool)` | Enable/disable logging |
+| `tools(array)` | Pass tools to default agent (e.g., WebSearch) |
+| `logPath(string)` | Custom log path |
 
 ```php
-use Filament\Forms\Components\TextInput;
-use Filament\Forms\Components\Textarea;
-use Filament\Forms\Components\Select;
-
-public static function form(Form $form): Form
-{
-    return $form->schema([
-        TextInput::make('name')
-            ->aiSchema(
-                description: 'The company or brand name',
-                prompt: 'Extract the official business name',
-                examples: ['Acme Corp', 'TechStart Inc']
-            ),
-
-        Textarea::make('description')
-            ->aiSchema(
-                description: 'A marketing description of the business',
-                prompt: 'Write a compelling 2-3 sentence description'
-            ),
-
-        Select::make('industry')
-            ->options([
-                'tech' => 'Technology',
-                'retail' => 'Retail',
-                'healthcare' => 'Healthcare',
-            ])
-            ->aiSchema(
-                description: 'The primary industry sector',
-                prompt: 'Select the most appropriate category'
-            ),
-    ]);
-}
+AiGenerateAction::make()
+    ->systemPrompt('You are a business data specialist.')
+    ->contextProvider(fn ($action) => [
+        'url' => $action->getRecord()->website_url,
+    ])
 ```
 
-## Generate Action
+## AiChatAction
 
-Add the bulk generate action to your resource pages:
+Refine a single field through a chat interface. Add it as a suffix action on any field.
 
-```php
-use Gwhthompson\FilamentAiForms\Actions\AiGenerateAction;
-
-protected function getHeaderActions(): array
-{
-    return [
-        AiGenerateAction::make()
-            ->aiModel('gpt-4o')
-            ->temperature(0.1)
-            ->systemPrompt('You are a business data specialist.')
-            ->contextProvider(fn ($action) => [
-                'url' => $action->getRecord()->website_url,
-            ]),
-    ];
-}
-```
-
-### Action Methods
-
-| Method | |
-|--------|---|
-| `aiModel(string $model)` | Set the OpenAI model (e.g., 'gpt-4o', 'gpt-4.1-mini') |
-| `temperature(float $temp)` | Control randomness (0.0 = deterministic, 2.0 = creative) |
-| `maxTokens(int $tokens)` | Set maximum response length |
-| `systemPrompt(string $prompt)` | Set custom system instructions |
-| `useWebSearch(bool $enabled)` | Enable or disable web search |
-| `contextProvider(Closure $provider)` | Pass additional context to the model |
-| `beforeGeneration(Closure $callback)` | Run code before generation |
-| `afterGeneration(Closure $callback)` | Run code after generation |
-
-## Chat Action
-
-Add a chat interface to refine individual fields:
+| Method | Purpose |
+|--------|---------|
+| `agent(string\|Closure)` | Custom agent class |
+| `systemPrompt(string\|Closure)` | System instructions |
+| `initialPrompt(string\|Closure)` | Pre-fill the chat input |
+| `contextPrompt(string\|Closure)` | Additional context |
 
 ```php
-use Gwhthompson\FilamentAiForms\Actions\AiChatAction;
-
 Textarea::make('bio')
     ->aiSchema(description: 'Professional biography')
     ->suffixAction(
@@ -190,69 +159,65 @@ Textarea::make('bio')
     )
 ```
 
-## Configuration
+## Custom Agents
 
-### Environment Variables
-
-```env
-AI_FORMS_MODEL=gpt-4.1-mini
-AI_FORMS_TEMPERATURE=0.05
-AI_FORMS_MAX_TOKENS=3000
-AI_FORMS_WEB_SEARCH=false
-AI_FORMS_COUNTRY=GB
-AI_FORMS_LOGGING=true
-```
-
-### Configuration File
+Agents use the Laravel AI SDK. Configure model, provider, and temperature with PHP attributes.
 
 ```php
-// config/filament-ai-forms.php
+use Laravel\Ai\Contracts\Agent;
+use Laravel\Ai\Contracts\HasStructuredOutput;
+use Laravel\Ai\Contracts\HasTools;
+use Laravel\Ai\Promptable;
+use Laravel\Ai\Attributes\Provider;
+use Laravel\Ai\Attributes\Model;
+use Laravel\Ai\Attributes\Temperature;
 
-return [
-    // OpenAI model
-    'model' => env('AI_FORMS_MODEL', 'gpt-4.1-mini'),
+#[Provider('openai')]
+#[Model('gpt-4o')]
+#[Temperature(0.1)]
+class MyGenerationAgent implements Agent, HasStructuredOutput, HasTools
+{
+    use Promptable;
 
-    // Temperature: 0.0 = deterministic, 2.0 = creative
-    'temperature' => env('AI_FORMS_TEMPERATURE', 0.05),
-
-    // Maximum response tokens
-    'max_output_tokens' => env('AI_FORMS_MAX_TOKENS', 3000),
-
-    // Web search
-    'web_search' => [
-        'enabled' => env('AI_FORMS_WEB_SEARCH', false),
-        'country' => env('AI_FORMS_COUNTRY', 'GB'),
-        'context_size' => 'medium',
-    ],
-
-    // Logging
-    'logging' => [
-        'enabled' => env('AI_FORMS_LOGGING', true),
-        'path' => storage_path('logs/ai-generation'),
-    ],
-
-    // Retry on validation failures
-    'retry' => [
-        'max_attempts' => 2,
-        'validate_schema' => true,
-    ],
-];
+    public function tools(): array
+    {
+        return [
+            new \Laravel\Ai\Tools\WebSearch,
+        ];
+    }
+}
 ```
+
+Key interfaces:
+
+- `HasStructuredOutput` -- for generation agents (returns typed data)
+- `Conversational` -- for chat agents (maintains message history)
+- `HasTools` -- adds tool usage (web search, web fetch, etc.)
+- `HasMiddleware` -- adds middleware to the agent pipeline
+
+Agent resolution order: action-level `->agent()` > plugin-level `->agent()` > config value > built-in default.
+
+## Testing
+
+The Laravel AI SDK provides test helpers to fake agent responses:
+
+```php
+use Laravel\Ai\Facades\Agent;
+
+Agent::fake([
+    ['name' => 'Acme Corp', 'description' => 'A test company'],
+]);
+
+// ... trigger the action ...
+
+Agent::assertPrompted(fn ($prompt) => str_contains($prompt, 'company name'));
+```
+
+Use `Agent::preventStrayPrompts()` to catch unexpected agent calls in your test suite.
 
 ## How It Works
 
-1. The package converts your Filament form schema to an OpenAI JSON schema
-2. Your Laravel validation rules become constraints (required, max length, enum values)
-3. OpenAI's structured output mode ensures the response matches your schema
-4. If validation fails, the package retries with feedback
-5. You review the generated values before applying them
-
-## Best Practices
-
-- Use low temperature (0.05-0.1) for consistent, deterministic output
-- Write clear `description` values - this is what the model sees
-- Include `examples` for consistent formatting
-- Use `contextProvider()` to pass URLs or reference content
+The package converts your Filament form schema into a JSON schema that the agent follows. Your Laravel validation rules (required, max length, enum values) become constraints in that schema. The agent returns structured data matching your field types, and you review each value before it touches the form.
 
 ## Custom Themes
 
@@ -275,28 +240,6 @@ The chat interface uses named CSS classes (`fi-ai-chat-*`) for easy customisatio
     @apply hidden;
 }
 ```
-
-## Testing
-
-```bash
-composer test
-```
-
-## Static Analysis
-
-```bash
-composer analyse
-```
-
-## Code Style
-
-```bash
-composer format
-```
-
-## Changelog
-
-Please see [CHANGELOG](CHANGELOG.md) for more information on what has changed recently.
 
 ## Credits
 

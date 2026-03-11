@@ -2,6 +2,8 @@
 
 declare(strict_types=1);
 
+use Gwhthompson\FilamentAiForms\Agents\ChatStreamAgent;
+use Gwhthompson\FilamentAiForms\Agents\FormGenerationAgent;
 use Gwhthompson\FilamentAiForms\FilamentAiFormsPlugin;
 
 covers(FilamentAiFormsPlugin::class);
@@ -21,107 +23,61 @@ describe('FilamentAiFormsPlugin', function (): void {
         });
     });
 
-    describe('model configuration', function (): void {
-        it('returns default model from config', function (): void {
-            config(['filament-ai-forms.model' => 'gpt-4.1-mini']);
-
+    describe('agent configuration', function (): void {
+        it('returns null agent by default', function (): void {
             $plugin = FilamentAiFormsPlugin::make();
 
-            expect($plugin->getModel())->toBe('gpt-4.1-mini');
+            expect($plugin->getAgent())->toBeNull();
         });
 
-        it('can set custom model', function (): void {
+        it('can set custom agent class', function (): void {
             $plugin = FilamentAiFormsPlugin::make()
-                ->model('gpt-4o');
+                ->agent(FormGenerationAgent::class);
 
-            expect($plugin->getModel())->toBe('gpt-4o');
+            expect($plugin->getAgent())->toBe(FormGenerationAgent::class);
         });
 
-        it('returns fluent instance when setting model', function (): void {
+        it('returns agent from config when set', function (): void {
+            config(['filament-ai-forms.agents.generation' => FormGenerationAgent::class]);
+
             $plugin = FilamentAiFormsPlugin::make();
-            $result = $plugin->model('gpt-4o');
+
+            expect($plugin->getAgent())->toBe(FormGenerationAgent::class);
+        });
+
+        it('returns fluent instance when setting agent', function (): void {
+            $plugin = FilamentAiFormsPlugin::make();
+            $result = $plugin->agent(FormGenerationAgent::class);
 
             expect($result)->toBe($plugin);
         });
     });
 
-    describe('temperature configuration', function (): void {
-        it('returns default temperature from config', function (): void {
-            config(['filament-ai-forms.temperature' => 0.05]);
-
+    describe('chat agent configuration', function (): void {
+        it('returns null chat agent by default', function (): void {
             $plugin = FilamentAiFormsPlugin::make();
 
-            expect($plugin->getTemperature())->toBe(0.05);
+            expect($plugin->getChatAgent())->toBeNull();
         });
 
-        it('can set custom temperature', function (): void {
+        it('can set custom chat agent class', function (): void {
             $plugin = FilamentAiFormsPlugin::make()
-                ->temperature(0.7);
+                ->chatAgent(ChatStreamAgent::class);
 
-            expect($plugin->getTemperature())->toBe(0.7);
+            expect($plugin->getChatAgent())->toBe(ChatStreamAgent::class);
         });
 
-        it('returns fluent instance when setting temperature', function (): void {
-            $plugin = FilamentAiFormsPlugin::make();
-            $result = $plugin->temperature(0.5);
-
-            expect($result)->toBe($plugin);
-        });
-    });
-
-    describe('web search configuration', function (): void {
-        it('has web search enabled by default', function (): void {
-            config(['filament-ai-forms.web_search.enabled' => true]);
+        it('returns chat agent from config when set', function (): void {
+            config(['filament-ai-forms.agents.chat' => ChatStreamAgent::class]);
 
             $plugin = FilamentAiFormsPlugin::make();
 
-            expect($plugin->isWebSearchEnabled())->toBeTrue();
+            expect($plugin->getChatAgent())->toBe(ChatStreamAgent::class);
         });
 
-        it('can disable web search', function (): void {
-            config(['filament-ai-forms.web_search.enabled' => true]);
-
-            $plugin = FilamentAiFormsPlugin::make()
-                ->webSearch(false);
-
-            expect($plugin->isWebSearchEnabled())->toBeFalse();
-        });
-
-        it('respects config when web search is disabled', function (): void {
-            config(['filament-ai-forms.web_search.enabled' => false]);
-
+        it('returns fluent instance when setting chat agent', function (): void {
             $plugin = FilamentAiFormsPlugin::make();
-
-            expect($plugin->isWebSearchEnabled())->toBeFalse();
-        });
-
-        it('returns fluent instance when setting web search', function (): void {
-            $plugin = FilamentAiFormsPlugin::make();
-            $result = $plugin->webSearch(true);
-
-            expect($result)->toBe($plugin);
-        });
-    });
-
-    describe('web search country configuration', function (): void {
-        it('returns default country from config', function (): void {
-            config(['filament-ai-forms.web_search.country' => 'GB']);
-
-            $plugin = FilamentAiFormsPlugin::make();
-
-            expect($plugin->getWebSearchCountry())->toBe('GB');
-        });
-
-        it('can set custom country', function (): void {
-            $plugin = FilamentAiFormsPlugin::make()
-                ->webSearchCountry('US');
-
-            expect($plugin->getWebSearchCountry())->toBe('US');
-        });
-
-        it('returns fluent instance when setting country', function (): void {
-            $plugin = FilamentAiFormsPlugin::make();
-            $result = $plugin->webSearchCountry('DE');
+            $result = $plugin->chatAgent(ChatStreamAgent::class);
 
             expect($result)->toBe($plugin);
         });
@@ -129,19 +85,12 @@ describe('FilamentAiFormsPlugin', function (): void {
 
     describe('fluent configuration', function (): void {
         it('supports chained configuration', function (): void {
-            // Ensure config is enabled for this test
-            config(['filament-ai-forms.web_search.enabled' => true]);
-
             $plugin = FilamentAiFormsPlugin::make()
-                ->model('gpt-4o')
-                ->temperature(0.3)
-                ->webSearch(true)
-                ->webSearchCountry('US');
+                ->agent(FormGenerationAgent::class)
+                ->chatAgent(ChatStreamAgent::class);
 
-            expect($plugin->getModel())->toBe('gpt-4o')
-                ->and($plugin->getTemperature())->toBe(0.3)
-                ->and($plugin->isWebSearchEnabled())->toBeTrue()
-                ->and($plugin->getWebSearchCountry())->toBe('US');
+            expect($plugin->getAgent())->toBe(FormGenerationAgent::class)
+                ->and($plugin->getChatAgent())->toBe(ChatStreamAgent::class);
         });
     });
 
@@ -150,10 +99,9 @@ describe('FilamentAiFormsPlugin', function (): void {
             $plugin = FilamentAiFormsPlugin::make();
             $panel = Mockery::mock(\Filament\Panel::class);
 
-            // Should complete without throwing
             $plugin->boot($panel);
 
-            expect(true)->toBeTrue();
+            expect($plugin)->toBeInstanceOf(FilamentAiFormsPlugin::class);
         });
     });
 
@@ -168,6 +116,45 @@ describe('FilamentAiFormsPlugin', function (): void {
             $plugin = FilamentAiFormsPlugin::get();
 
             expect($plugin)->toBeInstanceOf(FilamentAiFormsPlugin::class);
+        });
+    });
+
+    describe('plugin agent config wired into actions', function (): void {
+        it('AiGenerateAction resolves agent from plugin when set', function (): void {
+            $record = \Gwhthompson\FilamentAiForms\Tests\Fixtures\TestModel::factory()->create();
+
+            // Boot a panel so FilamentAiFormsPlugin::get() works
+            \Pest\Livewire\livewire(\Gwhthompson\FilamentAiForms\Tests\Fixtures\TestEditPage::class, ['record' => $record->id])
+                ->assertStatus(200);
+
+            // Configure the plugin with a custom agent
+            $plugin = FilamentAiFormsPlugin::get();
+            $plugin->agent(FormGenerationAgent::class);
+
+            // Create an action without explicit agent — should resolve from plugin
+            $action = \Gwhthompson\FilamentAiForms\Actions\AiGenerateAction::make();
+
+            // Use reflection to call the protected method
+            $method = new \ReflectionMethod($action, 'resolveAgentClass');
+
+            expect($method->invoke($action))->toBe(FormGenerationAgent::class);
+        });
+
+        it('AiChatAction resolves agent from plugin when set', function (): void {
+            $record = \Gwhthompson\FilamentAiForms\Tests\Fixtures\TestModel::factory()->create();
+
+            // Boot a panel so FilamentAiFormsPlugin::get() works
+            \Pest\Livewire\livewire(\Gwhthompson\FilamentAiForms\Tests\Fixtures\TestEditPage::class, ['record' => $record->id])
+                ->assertStatus(200);
+
+            // Configure the plugin with a custom chat agent
+            $plugin = FilamentAiFormsPlugin::get();
+            $plugin->chatAgent(ChatStreamAgent::class);
+
+            // Create an action without explicit agent — should resolve from plugin
+            $action = \Gwhthompson\FilamentAiForms\Actions\AiChatAction::make();
+
+            expect($action->getAgentClass())->toBe(ChatStreamAgent::class);
         });
     });
 });

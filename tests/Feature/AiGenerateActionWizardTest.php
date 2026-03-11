@@ -93,11 +93,11 @@ it('passes selected fields to service', function (): void {
         ->and($capturedFields)->toContain('description');
 });
 
-it('handles service errors gracefully', function (): void {
-    $this->mock(AiFormGenerationService::class, function (MockInterface $mock): void {
+it('handles service errors gracefully', function (string $exceptionClass, string $message): void {
+    $this->mock(AiFormGenerationService::class, function (MockInterface $mock) use ($exceptionClass, $message): void {
         $mock->shouldReceive('generate')
             ->once()
-            ->andThrow(new RuntimeException('OpenAI API error'));
+            ->andThrow(new $exceptionClass($message));
     });
 
     $record = TestModel::factory()->create();
@@ -110,64 +110,12 @@ it('handles service errors gracefully', function (): void {
         ->goToNextWizardStep()
         ->assertNotified()
         ->assertActionHalted('aiGenerate');
-});
-
-it('handles timeout errors gracefully', function (): void {
-    $this->mock(AiFormGenerationService::class, function (MockInterface $mock): void {
-        $mock->shouldReceive('generate')
-            ->once()
-            ->andThrow(new RuntimeException('Connection timeout'));
-    });
-
-    $record = TestModel::factory()->create();
-
-    livewire(TestEditPage::class, ['record' => $record->id])
-        ->mountAction('aiGenerate')
-        ->fillForm([
-            'field_name' => true,
-        ])
-        ->goToNextWizardStep()
-        ->assertNotified()
-        ->assertActionHalted('aiGenerate');
-});
-
-it('handles JSON parse errors gracefully', function (): void {
-    $this->mock(AiFormGenerationService::class, function (MockInterface $mock): void {
-        $mock->shouldReceive('generate')
-            ->once()
-            ->andThrow(new RuntimeException('Invalid JSON response from API'));
-    });
-
-    $record = TestModel::factory()->create();
-
-    livewire(TestEditPage::class, ['record' => $record->id])
-        ->mountAction('aiGenerate')
-        ->fillForm([
-            'field_name' => true,
-        ])
-        ->goToNextWizardStep()
-        ->assertNotified()
-        ->assertActionHalted('aiGenerate');
-});
-
-it('handles unexpected errors gracefully', function (): void {
-    $this->mock(AiFormGenerationService::class, function (MockInterface $mock): void {
-        $mock->shouldReceive('generate')
-            ->once()
-            ->andThrow(new RuntimeException('Database connection failed'));
-    });
-
-    $record = TestModel::factory()->create();
-
-    livewire(TestEditPage::class, ['record' => $record->id])
-        ->mountAction('aiGenerate')
-        ->fillForm([
-            'field_name' => true,
-        ])
-        ->goToNextWizardStep()
-        ->assertNotified()
-        ->assertActionHalted('aiGenerate');
-});
+})->with([
+    'general error' => [RuntimeException::class, 'AI API error'],
+    'timeout error' => [\Gwhthompson\FilamentAiForms\Exceptions\AiServiceTimeoutException::class, 'Connection timeout'],
+    'parse error' => [\Gwhthompson\FilamentAiForms\Exceptions\AiResponseParseException::class, 'Invalid JSON response'],
+    'unexpected error' => [RuntimeException::class, 'Database connection failed'],
+]);
 
 it('completes full wizard and applies accepted changes to form', function (): void {
     $this->mock(AiFormGenerationService::class, function (MockInterface $mock): void {

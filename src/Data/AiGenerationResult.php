@@ -19,14 +19,11 @@ class AiGenerationResult extends Data
         public float $duration,
         public string $model,
         public int $fieldsGenerated,
-        public ?string $responseId = null,
         public ?string $logPath = null,
         /** @var array<string, mixed>|null */
         public ?array $schema = null,
         public ?string $systemPrompt = null,
         public ?string $userPrompt = null,
-        /** @var array<string, mixed>|null */
-        public ?array $rawResponse = null,
     ) {}
 
     /** Get count of non-null fields in generated data. */

@@ -15,7 +15,7 @@ beforeEach(function (): void {
 });
 
 describe('FilamentToAiSchemaMapper', function (): void {
-    describe('buildOpenAiConfig', function (): void {
+    describe('buildSchemaConfig', function (): void {
         it('builds schema from text input components', function (): void {
             $components = [
                 TextInput::make('name')
@@ -26,9 +26,9 @@ describe('FilamentToAiSchemaMapper', function (): void {
                     ),
             ];
 
-            $config = $this->mapper->buildOpenAiConfig($components);
+            $config = $this->mapper->buildSchemaConfig($components);
 
-            expect($config)->toHaveKeys(['schema', 'systemPrompt', 'userPrompt'])
+            expect($config)->toHaveKeys(['schema', 'systemPrompt'])
                 ->and($config['schema'])->toBeArray()
                 ->and($config['schema']['properties'])->toHaveKey('name')
                 ->and($config['schema']['properties']['name']['type'])->toBe('string')
@@ -45,7 +45,7 @@ describe('FilamentToAiSchemaMapper', function (): void {
                     ),
             ];
 
-            $config = $this->mapper->buildOpenAiConfig($components);
+            $config = $this->mapper->buildSchemaConfig($components);
 
             expect($config['schema']['properties']['email']['format'])->toBe('email');
         });
@@ -60,7 +60,7 @@ describe('FilamentToAiSchemaMapper', function (): void {
                     ),
             ];
 
-            $config = $this->mapper->buildOpenAiConfig($components);
+            $config = $this->mapper->buildSchemaConfig($components);
 
             expect($config['schema']['properties']['website']['format'])->toBe('uri');
         });
@@ -79,7 +79,7 @@ describe('FilamentToAiSchemaMapper', function (): void {
                     ),
             ];
 
-            $config = $this->mapper->buildOpenAiConfig($components);
+            $config = $this->mapper->buildSchemaConfig($components);
 
             // The mapper uses array_values() which returns the labels
             expect($config['schema']['properties']['status']['enum'])
@@ -95,7 +95,7 @@ describe('FilamentToAiSchemaMapper', function (): void {
                     ),
             ];
 
-            $config = $this->mapper->buildOpenAiConfig($components);
+            $config = $this->mapper->buildSchemaConfig($components);
 
             expect($config['schema']['properties']['is_active']['type'])->toBe('boolean');
         });
@@ -109,7 +109,7 @@ describe('FilamentToAiSchemaMapper', function (): void {
                     ),
             ];
 
-            $config = $this->mapper->buildOpenAiConfig($components);
+            $config = $this->mapper->buildSchemaConfig($components);
 
             expect($config['schema']['properties']['brand']['description'])
                 ->toBe('Brand name');
@@ -122,7 +122,7 @@ describe('FilamentToAiSchemaMapper', function (): void {
                 TextInput::make('phone')->aiSchema(enabled: true),
             ];
 
-            $config = $this->mapper->buildOpenAiConfig(
+            $config = $this->mapper->buildSchemaConfig(
                 $components,
                 selectedFields: ['name', 'email']
             );
@@ -137,7 +137,7 @@ describe('FilamentToAiSchemaMapper', function (): void {
                 TextInput::make('internal_id')->aiSchema(enabled: false),
             ];
 
-            $config = $this->mapper->buildOpenAiConfig($components);
+            $config = $this->mapper->buildSchemaConfig($components);
 
             expect($config['schema']['properties'])->toHaveKey('name')
                 ->and($config['schema']['properties'])->not->toHaveKey('internal_id');
@@ -149,7 +149,7 @@ describe('FilamentToAiSchemaMapper', function (): void {
                 TextInput::make('nickname')->aiSchema(enabled: true, required: false),
             ];
 
-            $config = $this->mapper->buildOpenAiConfig($components);
+            $config = $this->mapper->buildSchemaConfig($components);
 
             expect($config['schema']['required'])->toContain('name')
                 ->and($config['schema']['required'])->not->toContain('nickname');
@@ -165,7 +165,7 @@ describe('FilamentToAiSchemaMapper', function (): void {
                     ),
             ];
 
-            $config = $this->mapper->buildOpenAiConfig($components);
+            $config = $this->mapper->buildSchemaConfig($components);
 
             expect($config['schema']['properties']['bio']['type'])->toBe('string');
         });
@@ -179,7 +179,7 @@ describe('FilamentToAiSchemaMapper', function (): void {
                     ),
             ];
 
-            $config = $this->mapper->buildOpenAiConfig($components);
+            $config = $this->mapper->buildSchemaConfig($components);
 
             expect($config['systemPrompt'])->toContain('Generate structured data')
                 ->and($config['systemPrompt'])->toContain('proper capitalization');
@@ -191,7 +191,7 @@ describe('FilamentToAiSchemaMapper', function (): void {
             ];
 
             $basePrompt = 'You are analyzing business data.';
-            $config = $this->mapper->buildOpenAiConfig($components, $basePrompt);
+            $config = $this->mapper->buildSchemaConfig($components, $basePrompt);
 
             expect($config['systemPrompt'])->toContain($basePrompt);
         });
@@ -208,7 +208,7 @@ describe('validation constraints mapping', function (): void {
                 ->aiSchema(enabled: true),
         ];
 
-        $config = $mapper->buildOpenAiConfig($components);
+        $config = $mapper->buildSchemaConfig($components);
 
         expect($config['schema']['properties']['email']['format'])->toBe('email');
     });
@@ -222,7 +222,7 @@ describe('validation constraints mapping', function (): void {
                 ->aiSchema(enabled: true),
         ];
 
-        $config = $mapper->buildOpenAiConfig($components);
+        $config = $mapper->buildSchemaConfig($components);
 
         expect($config['schema']['properties']['website']['format'])->toBe('uri');
     });
@@ -235,7 +235,7 @@ describe('aiSchema required flag behavior', function (): void {
                 ->aiSchema(enabled: true, required: true),
         ];
 
-        $config = $this->mapper->buildOpenAiConfig($components);
+        $config = $this->mapper->buildSchemaConfig($components);
 
         // With aiSchema(required: true), type stays as string, not ['string', 'null']
         expect($config['schema']['properties']['name']['type'])->toBe('string');
@@ -247,7 +247,7 @@ describe('aiSchema required flag behavior', function (): void {
                 ->aiSchema(enabled: true, required: true),
         ];
 
-        $config = $this->mapper->buildOpenAiConfig($components);
+        $config = $this->mapper->buildSchemaConfig($components);
 
         // aiSchema(required: true) means never nullable
         expect($config['schema']['properties']['is_active']['type'])->toBe('boolean');
@@ -261,7 +261,7 @@ describe('aiSchema required flag behavior', function (): void {
                 ->aiSchema(enabled: true, required: false),
         ];
 
-        $config = $this->mapper->buildOpenAiConfig($components);
+        $config = $this->mapper->buildSchemaConfig($components);
 
         expect($config['schema']['required'])
             ->toContain('required_field')
@@ -290,7 +290,7 @@ describe('aiSchema examples and pattern', function (): void {
                 ->aiSchema(enabled: true, pattern: '^[A-Z]{3}-\d{4}$'),
         ];
 
-        $config = $this->mapper->buildOpenAiConfig($components);
+        $config = $this->mapper->buildSchemaConfig($components);
 
         expect($config['schema']['properties']['sku']['pattern'])
             ->toBe('^[A-Z]{3}-\d{4}$');
@@ -302,7 +302,7 @@ describe('edge cases and error handling', function (): void {
         $mapper = app(FilamentToAiSchemaMapper::class);
 
         // Empty array
-        expect(fn () => $mapper->buildOpenAiConfig([]))
+        expect(fn () => $mapper->buildSchemaConfig([]))
             ->toThrow(InvalidArgumentException::class, 'No AI-generatable components found in schema');
     });
 
@@ -314,7 +314,7 @@ describe('edge cases and error handling', function (): void {
             TextInput::make('email')->aiSchema(enabled: false),
         ];
 
-        expect(fn () => $mapper->buildOpenAiConfig($components))
+        expect(fn () => $mapper->buildSchemaConfig($components))
             ->toThrow(InvalidArgumentException::class, 'No AI-generatable components found in schema');
     });
 
@@ -327,7 +327,7 @@ describe('edge cases and error handling', function (): void {
                 ->aiSchema(enabled: true),
         ];
 
-        expect(fn () => $mapper->buildOpenAiConfig($components))
+        expect(fn () => $mapper->buildSchemaConfig($components))
             ->toThrow(InvalidArgumentException::class, 'has no options for enum schema');
     });
 
@@ -340,7 +340,7 @@ describe('edge cases and error handling', function (): void {
                 ->aiSchema(enabled: true),
         ];
 
-        expect(fn () => $mapper->buildOpenAiConfig($components))
+        expect(fn () => $mapper->buildSchemaConfig($components))
             ->toThrow(InvalidArgumentException::class, 'has no options for enum array schema');
     });
 
@@ -353,7 +353,7 @@ describe('edge cases and error handling', function (): void {
                 ->aiSchema(enabled: true),
         ];
 
-        $config = $mapper->buildOpenAiConfig($components);
+        $config = $mapper->buildSchemaConfig($components);
 
         expect($config['schema']['properties']['dynamic_options']['enum'])
             ->toBe(['Option A', 'Option B']);
@@ -372,7 +372,7 @@ describe('nullable types', function (): void {
                 ->aiSchema(enabled: true, required: true),
         ];
 
-        $config = $mapper->buildOpenAiConfig($components);
+        $config = $mapper->buildSchemaConfig($components);
 
         // Type stays as string (not array with null)
         expect($config['schema']['properties']['required_name']['type'])
@@ -388,7 +388,7 @@ describe('nullable types', function (): void {
                 ->aiSchema(enabled: true, required: true),
         ];
 
-        $config = $mapper->buildOpenAiConfig($components);
+        $config = $mapper->buildSchemaConfig($components);
 
         // Type stays as string (not array with null)
         expect($config['schema']['properties']['required_status']['type'])
@@ -405,7 +405,7 @@ describe('nullable types', function (): void {
                 ->aiSchema(enabled: true, required: false),
         ];
 
-        $config = $mapper->buildOpenAiConfig($components);
+        $config = $mapper->buildSchemaConfig($components);
 
         expect($config['schema']['properties']['optional_tags']['type'])
             ->toBe(['array', 'null']);
@@ -420,7 +420,7 @@ describe('nullable types', function (): void {
                 ->aiSchema(enabled: true, required: false),
         ];
 
-        $config = $mapper->buildOpenAiConfig($components);
+        $config = $mapper->buildSchemaConfig($components);
 
         expect($config['schema']['properties']['optional_flag']['type'])
             ->toBe(['boolean', 'null']);
@@ -436,7 +436,7 @@ describe('nullable types', function (): void {
                 ->aiSchema(enabled: true, required: false),
         ];
 
-        $config = $mapper->buildOpenAiConfig($components);
+        $config = $mapper->buildSchemaConfig($components);
 
         expect($config['schema']['properties']['optional_quantity']['type'])
             ->toBe(['number', 'null']);
@@ -454,7 +454,7 @@ describe('numeric schema constraints', function (): void {
                 ->aiSchema(enabled: true),
         ];
 
-        $config = $mapper->buildOpenAiConfig($components);
+        $config = $mapper->buildSchemaConfig($components);
 
         expect($config['schema']['properties']['quantity']['minimum'])->toBe(1);
     });
@@ -469,7 +469,7 @@ describe('numeric schema constraints', function (): void {
                 ->aiSchema(enabled: true),
         ];
 
-        $config = $mapper->buildOpenAiConfig($components);
+        $config = $mapper->buildSchemaConfig($components);
 
         expect($config['schema']['properties']['rating']['maximum'])->toBe(10);
     });
@@ -485,7 +485,7 @@ describe('parseValidationRules', function (): void {
                 ->aiSchema(enabled: true),
         ];
 
-        $config = $mapper->buildOpenAiConfig($components);
+        $config = $mapper->buildSchemaConfig($components);
 
         // The email format should be detected
         expect($config['schema']['properties']['email']['format'])->toBe('email');
@@ -503,7 +503,7 @@ describe('array constraints', function (): void {
                 ->aiSchema(enabled: true),
         ];
 
-        $config = $mapper->buildOpenAiConfig($components);
+        $config = $mapper->buildSchemaConfig($components);
 
         expect($config['schema']['properties']['tags']['minItems'])->toBe(1);
     });
@@ -518,7 +518,7 @@ describe('array constraints', function (): void {
                 ->aiSchema(enabled: true),
         ];
 
-        $config = $mapper->buildOpenAiConfig($components);
+        $config = $mapper->buildSchemaConfig($components);
 
         expect($config['schema']['properties']['categories']['maxItems'])->toBe(3);
     });
@@ -533,7 +533,7 @@ describe('array constraints', function (): void {
                 ->aiSchema(enabled: true),
         ];
 
-        $config = $mapper->buildOpenAiConfig($components);
+        $config = $mapper->buildSchemaConfig($components);
 
         expect($config['schema']['properties']['skills']['minItems'])->toBe(2)
             ->and($config['schema']['properties']['skills']['maxItems'])->toBe(4);
@@ -550,7 +550,7 @@ describe('nullable type arrays', function (): void {
                 ->aiSchema(enabled: true),
         ];
 
-        $config = $mapper->buildOpenAiConfig($components);
+        $config = $mapper->buildSchemaConfig($components);
 
         expect($config['schema']['properties']['interests']['type'])->toBe('array')
             ->and($config['schema']['properties']['interests']['items']['type'])->toBe('string')

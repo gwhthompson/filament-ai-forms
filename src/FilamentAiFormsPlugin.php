@@ -9,13 +9,9 @@ use Filament\Panel;
 
 class FilamentAiFormsPlugin implements Plugin
 {
-    protected ?string $model = null;
+    protected ?string $agent = null;
 
-    protected ?float $temperature = null;
-
-    protected bool $webSearchEnabled = true;
-
-    protected ?string $webSearchCountry = null;
+    protected ?string $chatAgent = null;
 
     public static function make(): static
     {
@@ -49,69 +45,43 @@ class FilamentAiFormsPlugin implements Plugin
         // Panel-specific boot logic if needed
     }
 
-    public function model(string $model): static
+    /** Configure the default Agent class for form generation. */
+    public function agent(string $class): static
     {
-        $this->model = $model;
+        $this->agent = $class;
 
         return $this;
     }
 
-    public function getModel(): string
+    /** Get the configured generation agent class. */
+    public function getAgent(): ?string
     {
-        if ($this->model !== null) {
-            return $this->model;
+        if ($this->agent !== null) {
+            return $this->agent;
         }
 
-        $configValue = config('filament-ai-forms.model', 'gpt-4.1-mini');
+        $configValue = config('filament-ai-forms.agents.generation');
 
-        return is_string($configValue) ? $configValue : 'gpt-4.1-mini';
+        return is_string($configValue) ? $configValue : null;
     }
 
-    public function temperature(float $temperature): static
+    /** Configure the default Agent class for chat. */
+    public function chatAgent(string $class): static
     {
-        $this->temperature = $temperature;
+        $this->chatAgent = $class;
 
         return $this;
     }
 
-    public function getTemperature(): float
+    /** Get the configured chat agent class. */
+    public function getChatAgent(): ?string
     {
-        if ($this->temperature !== null) {
-            return $this->temperature;
+        if ($this->chatAgent !== null) {
+            return $this->chatAgent;
         }
 
-        $configValue = config('filament-ai-forms.temperature', 0.05);
+        $configValue = config('filament-ai-forms.agents.chat');
 
-        return is_float($configValue) ? $configValue : (is_numeric($configValue) ? (float) $configValue : 0.05);
-    }
-
-    public function webSearch(bool $enabled = true): static
-    {
-        $this->webSearchEnabled = $enabled;
-
-        return $this;
-    }
-
-    public function isWebSearchEnabled(): bool
-    {
-        return $this->webSearchEnabled && (bool) config('filament-ai-forms.web_search.enabled', true);
-    }
-
-    public function webSearchCountry(string $country): static
-    {
-        $this->webSearchCountry = $country;
-
-        return $this;
-    }
-
-    public function getWebSearchCountry(): string
-    {
-        if ($this->webSearchCountry !== null) {
-            return $this->webSearchCountry;
-        }
-
-        $configValue = config('filament-ai-forms.web_search.country', 'GB');
-
-        return is_string($configValue) ? $configValue : 'GB';
+        return is_string($configValue) ? $configValue : null;
     }
 }

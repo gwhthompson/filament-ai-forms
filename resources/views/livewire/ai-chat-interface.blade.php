@@ -7,79 +7,76 @@
     <div class="fi-ai-chat-messages flex-1 overflow-y-auto">
         @forelse ($messages as $index => $message)
             @if ($message['role'] === 'user')
-                {{-- User Message: Bubble Style --}}
+                {{-- User Message: Right-aligned with colored bubble --}}
                 <div
                     wire:key="message-{{ $index }}"
-                    class="fi-ai-chat-message fi-ai-chat-message-user group relative w-full border-b border-gray-100 bg-gray-50/50 px-6 py-4 transition-colors duration-200 hover:bg-gray-100/50 dark:border-gray-800 dark:bg-gray-900/50 dark:hover:bg-gray-900/70"
+                    class="fi-ai-chat-message fi-ai-chat-message-user group relative flex justify-end px-4 py-3"
                 >
+                    <div
+                        class="fi-ai-chat-message-content bg-primary-600 dark:bg-primary-500 max-w-[85%] rounded-2xl rounded-tr-sm px-4 py-2.5 text-white shadow-sm"
+                    >
+                        <p class="m-0 text-sm leading-relaxed break-words whitespace-pre-wrap">
+                            {{ $message['content'] }}
+                        </p>
+                        <div class="text-primary-200 dark:text-primary-200 mt-1.5 text-right text-xs">
+                            {{ Carbon::parse($message['timestamp'])->diffForHumans() }}
+                        </div>
+                    </div>
+
                     {{-- Delete Button --}}
                     <div
-                        class="fi-ai-chat-message-delete-btn absolute top-2 right-2 opacity-0 transition-opacity group-hover:opacity-100"
+                        class="fi-ai-chat-message-delete-btn absolute top-1 right-1 opacity-0 transition-opacity group-hover:opacity-100"
                     >
                         <x-filament::icon-button
                             wire:click="deleteMessage({{ $index }})"
                             icon="heroicon-o-x-mark"
                             color="gray"
-                            size="sm"
+                            size="xs"
                             label="Delete message"
                         />
-                    </div>
-
-                    <div class="flex justify-end">
-                        <div class="max-w-[85%]">
-                            {{-- User Message Bubble --}}
-                            <div
-                                class="fi-ai-chat-message-content bg-primary-600 dark:bg-primary-500 rounded-lg px-4 py-3 shadow-sm"
-                            >
-                                <p class="m-0 text-sm leading-relaxed break-words whitespace-pre-wrap text-white">
-                                    {{ $message['content'] }}
-                                </p>
-                            </div>
-
-                            {{-- Metadata Below --}}
-                            <div
-                                class="fi-ai-chat-message-meta mt-2 flex items-center justify-end gap-2 text-xs text-gray-500 dark:text-gray-400"
-                            >
-                                <span>{{ Carbon::parse($message['timestamp'])->diffForHumans() }}</span>
-                                <span class="text-gray-400 dark:text-gray-600">·</span>
-                                <span class="font-medium">You</span>
-                            </div>
-                        </div>
                     </div>
                 </div>
             @else
-                {{-- Agent Message: Full Width, Clean --}}
+                {{-- Assistant Message: Left-aligned with avatar, no bubble --}}
                 <div
                     wire:key="message-{{ $index }}"
-                    class="fi-ai-chat-message fi-ai-chat-message-assistant group relative w-full border-b border-gray-100 px-6 py-4 transition-colors duration-200 hover:bg-gray-50/50 dark:border-gray-800 dark:hover:bg-white/5"
+                    class="fi-ai-chat-message fi-ai-chat-message-assistant group relative flex gap-3 px-4 py-3"
                 >
+                    {{-- AI Avatar --}}
+                    <div class="shrink-0">
+                        <div
+                            class="bg-primary-100 dark:bg-primary-900/50 flex h-8 w-8 items-center justify-center rounded-full"
+                        >
+                            <x-filament::icon
+                                icon="heroicon-m-sparkles"
+                                class="text-primary-600 dark:text-primary-400 h-4 w-4"
+                            />
+                        </div>
+                    </div>
+
+                    {{-- Content --}}
+                    <div class="fi-ai-chat-message-content min-w-0 flex-1">
+                        <p
+                            class="m-0 text-sm leading-relaxed break-words whitespace-pre-wrap text-gray-700 dark:text-gray-300"
+                        >
+                            {{ $message['content'] }}
+                        </p>
+                        <div class="mt-1.5 text-xs text-gray-500 dark:text-gray-400">
+                            {{ Carbon::parse($message['timestamp'])->diffForHumans() }}
+                        </div>
+                    </div>
+
                     {{-- Delete Button --}}
                     <div
-                        class="fi-ai-chat-message-delete-btn absolute top-2 right-2 opacity-0 transition-opacity group-hover:opacity-100"
+                        class="fi-ai-chat-message-delete-btn absolute top-1 left-10 opacity-0 transition-opacity group-hover:opacity-100"
                     >
                         <x-filament::icon-button
                             wire:click="deleteMessage({{ $index }})"
                             icon="heroicon-o-x-mark"
                             color="gray"
-                            size="sm"
+                            size="xs"
                             label="Delete message"
                         />
-                    </div>
-
-                    {{-- Message Content (Full Width) --}}
-                    <div class="fi-ai-chat-message-content prose prose-sm dark:prose-invert max-w-none">
-                        <p class="m-0 text-sm leading-relaxed break-words text-gray-700 dark:text-gray-300">
-                            {{ $message['content'] }}
-                        </p>
-                    </div>
-
-                    {{-- Metadata Below --}}
-                    <div
-                        class="fi-ai-chat-message-meta mt-2 flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400"
-                    >
-                        <span class="font-medium">AI Assistant</span>
-                        <span class="text-gray-400 dark:text-gray-600">·</span>
-                        <span>{{ Carbon::parse($message['timestamp'])->diffForHumans() }}</span>
                     </div>
                 </div>
             @endif
@@ -98,28 +95,28 @@
             </div>
         @endforelse
 
-        {{-- Streaming Message (Static Target) --}}
+        {{-- Streaming Message --}}
         @if ($generating)
-            <div
-                class="fi-ai-chat-streaming group w-full border-b border-gray-100 px-6 py-4 transition-colors duration-200 hover:bg-gray-50/50 dark:border-gray-800 dark:hover:bg-white/5"
-            >
-                {{-- Streaming Content (Full Width) --}}
-                <div class="fi-ai-chat-message-content prose prose-sm dark:prose-invert max-w-none">
-                    <p class="m-0 text-sm leading-relaxed break-words text-gray-700 dark:text-gray-300">
-                        <span wire:stream="ai-streaming" class="inline">{{ $streamingContent }}</span>
-                        <span
-                            class="fi-ai-chat-cursor bg-primary-600 ml-0.5 inline-block h-4 w-1.5 animate-pulse align-bottom"
-                        ></span>
-                    </p>
+            <div class="fi-ai-chat-streaming group relative flex gap-3 px-4 py-3">
+                {{-- AI Avatar with loading indicator --}}
+                <div class="shrink-0">
+                    <div
+                        class="bg-primary-100 dark:bg-primary-900/50 flex h-8 w-8 items-center justify-center rounded-full"
+                    >
+                        <x-filament::loading-indicator class="text-primary-600 dark:text-primary-400 h-4 w-4" />
+                    </div>
                 </div>
 
-                {{-- Metadata Below --}}
-                <div
-                    class="fi-ai-chat-message-meta mt-2 flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400"
-                >
-                    <span class="font-medium">AI Assistant</span>
-                    <span class="text-gray-400 dark:text-gray-600">·</span>
-                    <span class="animate-pulse">responding now</span>
+                {{-- Content --}}
+                <div class="fi-ai-chat-message-content min-w-0 flex-1">
+                    <p
+                        class="m-0 text-sm leading-relaxed break-words whitespace-pre-wrap text-gray-700 dark:text-gray-300"
+                    >
+                        <span wire:stream="ai-streaming" class="inline">{{ $streamingContent }}</span>
+                        <span
+                            class="fi-ai-chat-cursor bg-primary-600 dark:bg-primary-400 ml-0.5 inline-block h-4 w-0.5 animate-pulse align-text-bottom"
+                        ></span>
+                    </p>
                 </div>
             </div>
         @endif

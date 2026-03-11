@@ -5,6 +5,7 @@ declare(strict_types=1);
 use Filament\Actions\Action;
 use Filament\Support\Icons\Heroicon;
 use Gwhthompson\FilamentAiForms\Actions\AiGenerateAction;
+use Gwhthompson\FilamentAiForms\Agents\FormGenerationAgent;
 use Gwhthompson\FilamentAiForms\Tests\Fixtures\TestEditPage;
 use Gwhthompson\FilamentAiForms\Tests\Fixtures\TestModel;
 
@@ -48,7 +49,6 @@ describe('AiGenerateAction on edit page', function (): void {
 });
 
 // Test action configuration via assertActionExists callback pattern
-// This tests action properties through Livewire without triggering render issues
 describe('AiGenerateAction configuration via livewire callback', function (): void {
     it('has sparkles icon via livewire', function (): void {
         $record = TestModel::factory()->create();
@@ -101,8 +101,6 @@ describe('AiGenerateAction configuration via livewire callback', function (): vo
     it('has empty modal footer actions for wizard', function (): void {
         $record = TestModel::factory()->create();
 
-        // Wizards handle their own footer actions via the Wizard component,
-        // so getModalFooterActions() returns an empty array
         livewire(TestEditPage::class, ['record' => $record->id])
             ->assertActionExists('aiGenerate', fn (Action $action): bool => $action->getModalFooterActions() === []
             );
@@ -132,23 +130,21 @@ describe('AiGenerateAction configuration', function (): void {
 
     it('supports fluent configuration', function (): void {
         $action = AiGenerateAction::make()
-            ->aiModel('gpt-4o')
-            ->temperature(0.2)
-            ->maxTokens(3000)
+            ->agent(FormGenerationAgent::class)
             ->systemPrompt('Test prompt')
-            ->useWebSearch(false)
             ->logEnabled(true)
             ->logPath('/tmp/logs');
 
         expect($action)->toBeInstanceOf(AiGenerateAction::class);
     });
 
-    it('can configure onOptionsResolution callback', function (): void {
-        $action = AiGenerateAction::make();
-        $result = $action->onOptionsResolution(fn (string $field): ?array => ['option1', 'option2']);
+    it('supports closure for systemPrompt', function (): void {
+        $action = AiGenerateAction::make()
+            ->systemPrompt(fn (): string => 'Dynamic prompt');
 
-        expect($result)->toBe($action);
+        expect($action)->toBeInstanceOf(AiGenerateAction::class);
     });
+
 });
 
 describe('AiGenerateAction context', function (): void {
@@ -187,10 +183,6 @@ describe('AiGenerateAction context', function (): void {
         expect($receivedAction)->toBe($action);
     });
 });
-
-// Note: Wizard integration tests are in AiGenerateActionWizardTest.php
-// They require isolation due to Livewire 3.x state pollution.
-// Run with: vendor/bin/pest --group=wizard-isolation
 
 describe('AiGenerateAction hooks', function (): void {
     it('can configure beforeGeneration hook', function (): void {

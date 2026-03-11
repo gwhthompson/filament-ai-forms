@@ -4,6 +4,7 @@
     :$initialPrompt
     :$systemPrompt
     :$contextPrompt
+    :$agentClass
     :$identifier
     :key="$identifier"
 />

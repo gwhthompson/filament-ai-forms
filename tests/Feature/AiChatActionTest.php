@@ -310,6 +310,7 @@ describe('AiChatAction', function (): void {
                 ->and($view->getData()['systemPrompt'])->toBe('Custom system prompt')
                 ->and($view->getData()['initialPrompt'])->toBe('Custom initial prompt')
                 ->and($view->getData()['contextPrompt'])->toBe('Custom context prompt')
+                ->and($view->getData()['agentClass'])->toBe(\Gwhthompson\FilamentAiForms\Agents\ChatStreamAgent::class)
                 ->and($view->getData()['identifier'])->toBe('data.description.123');
         });
     });

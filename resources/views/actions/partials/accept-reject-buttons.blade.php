@@ -3,9 +3,10 @@
         color="gray"
         size="sm"
         x-on:click="
-      const data = $wire.mountedActions[0].data;
+      let idx = $wire.mountedActions.length - 1;
+      const data = $wire.mountedActions.at(-1).data;
       Object.keys(data).filter(k => k.startsWith('accept_')).forEach(k => {
-        $wire.set('mountedActions.0.data.' + k, false);
+        $wire.set(`mountedActions.${idx}.data.${k}`, false);
       });
     "
     >
@@ -16,9 +17,10 @@
         color="success"
         size="sm"
         x-on:click="
-      const data = $wire.mountedActions[0].data;
+      let idx = $wire.mountedActions.length - 1;
+      const data = $wire.mountedActions.at(-1).data;
       Object.keys(data).filter(k => k.startsWith('accept_')).forEach(k => {
-        $wire.set('mountedActions.0.data.' + k, true);
+        $wire.set(`mountedActions.${idx}.data.${k}`, true);
       });
     "
     >

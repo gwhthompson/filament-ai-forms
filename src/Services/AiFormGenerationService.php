@@ -5,28 +5,21 @@ declare(strict_types=1);
 namespace Gwhthompson\FilamentAiForms\Services;
 
 use Filament\Schemas\Components\Component;
+use Gwhthompson\FilamentAiForms\Agents\FormGenerationAgent;
 use Gwhthompson\FilamentAiForms\Data\AiGenerationConfig;
 use Gwhthompson\FilamentAiForms\Data\AiGenerationResult;
+use Gwhthompson\FilamentAiForms\Exceptions\AiResponseParseException;
+use Gwhthompson\FilamentAiForms\Exceptions\AiServiceTimeoutException;
 use Gwhthompson\FilamentAiForms\Services\Logging\AiGenerationLogger;
 use Illuminate\Support\Facades\Log;
-use OpenAI\Laravel\Facades\OpenAI;
+use Laravel\Ai\Responses\StructuredAgentResponse;
 use RuntimeException;
 use Throwable;
 
 /**
- * Generic service for AI-powered form data generation using OpenAI.
+ * Generic service for AI-powered form data generation.
  *
- * This service is not tied to any specific model or form structure.
- * It can be used with any Filament form that has fields configured
- * with the aiSchema() mixin.
- *
- * @example
- * $service = app(AiFormGenerationService::class);
- * $result = $service->generate(
- *     config: AiGenerationConfig::from([...]),
- *     fields: $fieldMetadata,
- *     context: ['url' => 'https://example.com']
- * );
+ * Uses the Laravel AI SDK's Agent pattern for provider-agnostic generation.
  */
 class AiFormGenerationService
 {
@@ -35,7 +28,7 @@ class AiFormGenerationService
     ) {}
 
     /**
-     * Generate form data using OpenAI.
+     * Generate form data using an AI agent.
      *
      * @param  AiGenerationConfig  $config  Generation configuration
      * @param  array<int, Component>  $components  Filament form components
@@ -53,50 +46,45 @@ class AiFormGenerationService
         $startTime = microtime(true);
 
         try {
-            // Build schema and prompts from components
             $schemaConfig = $this->buildSchemaConfig($components, $config, $selectedFields);
+            $userPrompt = $this->buildUserPrompt($context);
 
-            // Build user prompt with context
-            $userPrompt = $this->buildUserPrompt($config, $context);
+            // Resolve agent
+            /** @var FormGenerationAgent $agent */
+            $agent = $config->agentClass !== null
+                ? app($config->agentClass)
+                : new FormGenerationAgent(
+                    systemInstructions: $schemaConfig['systemPrompt'],
+                    rawSchema: $schemaConfig['schema'],
+                    tools: $config->tools,
+                );
 
-            // Build API request parameters
-            $requestParams = $this->buildRequestParams(
-                config: $config,
-                schemaConfig: $schemaConfig,
-                userPrompt: $userPrompt
-            );
+            // Call agent — structured output returns array-accessible response
+            $response = $agent->prompt($userPrompt);
 
-            // Call OpenAI API (validates response completeness)
-            $response = $this->callOpenAi($requestParams);
-
-            // Extract and decode content (already validated as non-empty by callOpenAi)
-            $content = property_exists($response, 'outputText') ? $response->outputText : '';
-
-            $contentString = is_scalar($content) ? (string) $content : '';
-            $data = json_decode($contentString, true, 512, JSON_THROW_ON_ERROR);
-
-            if (! is_array($data)) {
-                throw new RuntimeException('OpenAI returned invalid JSON');
+            if (! $response instanceof StructuredAgentResponse) {
+                throw new RuntimeException('Agent must implement HasStructuredOutput for form generation.');
             }
 
-            // Create result
-            $duration = microtime(true) - $startTime;
-            $modelValue = property_exists($response, 'model') ? $response->model : null;
-            $responseModel = is_scalar($modelValue) ? (string) $modelValue : $config->model;
-            $idValue = property_exists($response, 'id') ? $response->id : null;
-            $responseId = is_scalar($idValue) ? (string) $idValue : null;
-
+            // Extract data from structured response
             /** @var array<string, mixed> $data */
+            $data = $response->toArray();
+
+            if ($data === []) {
+                throw new RuntimeException('AI returned no data');
+            }
+
+            $duration = microtime(true) - $startTime;
+            $modelName = $response->meta->model ?? 'unknown';
+
             $result = new AiGenerationResult(
                 data: $data,
                 duration: $duration,
-                model: $responseModel,
+                model: $modelName,
                 fieldsGenerated: count($data),
-                responseId: $responseId,
                 schema: $schemaConfig['schema'],
                 systemPrompt: $schemaConfig['systemPrompt'],
                 userPrompt: $userPrompt,
-                rawResponse: $this->buildRawResponseMetadata($response)
             );
 
             // Log if enabled
@@ -106,19 +94,7 @@ class AiFormGenerationService
                     path: $config->getLogPath()
                 );
 
-                $logPath = $logger->logSummary($config, $result, $context);
-                $result = new AiGenerationResult(
-                    data: $result->data,
-                    duration: $result->duration,
-                    model: $result->model,
-                    fieldsGenerated: $result->fieldsGenerated,
-                    responseId: $result->responseId,
-                    logPath: $logPath,
-                    schema: $result->schema,
-                    systemPrompt: $result->systemPrompt,
-                    userPrompt: $result->userPrompt,
-                    rawResponse: $result->rawResponse
-                );
+                $result->logPath = $logger->logSummary($config, $result, $context);
             }
 
             return $result;
@@ -129,7 +105,11 @@ class AiFormGenerationService
                 'duration' => round(microtime(true) - $startTime, 2).'s',
             ]);
 
-            throw $throwable;
+            throw match (true) {
+                str_contains($throwable->getMessage(), 'timeout') => new AiServiceTimeoutException($throwable->getMessage(), $throwable),
+                str_contains($throwable->getMessage(), 'JSON') => new AiResponseParseException($throwable->getMessage(), $throwable),
+                default => $throwable,
+            };
         }
     }
 
@@ -138,14 +118,14 @@ class AiFormGenerationService
      *
      * @param  array<int, Component>  $components
      * @param  array<int, string>|null  $selectedFields
-     * @return array{schema: array<string, mixed>, systemPrompt: string, userPrompt: string}
+     * @return array{schema: array<string, mixed>, systemPrompt: string}
      */
     protected function buildSchemaConfig(
         array $components,
         AiGenerationConfig $config,
         ?array $selectedFields
     ): array {
-        return $this->schemaMapper->buildOpenAiConfig(
+        return $this->schemaMapper->buildSchemaConfig(
             components: $components,
             basePrompt: $config->systemPrompt ?? 'You are an AI assistant generating structured data.',
             selectedFields: $selectedFields
@@ -157,72 +137,13 @@ class AiFormGenerationService
      *
      * @param  array<string, mixed>  $context
      */
-    protected function buildUserPrompt(AiGenerationConfig $config, array $context): string
+    protected function buildUserPrompt(array $context): string
     {
         if (isset($context['url']) && is_string($context['url'])) {
             return 'Create a profile for '.$context['url'].'.';
         }
 
         return 'Please generate the following data:';
-    }
-
-    /**
-     * Build OpenAI API request parameters.
-     *
-     * @param  array{schema: array<string, mixed>, systemPrompt: string, userPrompt: string}  $schemaConfig
-     * @return array<string, mixed>
-     */
-    protected function buildRequestParams(
-        AiGenerationConfig $config,
-        array $schemaConfig,
-        string $userPrompt
-    ): array {
-        $params = [
-            'model' => $config->model,
-            'input' => [
-                [
-                    'role' => 'system',
-                    'content' => [['type' => 'input_text', 'text' => $schemaConfig['systemPrompt']]],
-                ],
-                [
-                    'role' => 'user',
-                    'content' => [['type' => 'input_text', 'text' => $userPrompt]],
-                ],
-            ],
-            'text' => [
-                'format' => [
-                    'type' => 'json_schema',
-                    'name' => 'generated_form_data',
-                    'strict' => true,
-                    'schema' => $schemaConfig['schema'],
-                ],
-            ],
-            'reasoning' => (object) [],
-            'tools' => $config->getTools(),
-        ];
-
-        // Only include optional parameters if they are set
-        if ($config->temperature !== null) {
-            $params['temperature'] = $config->temperature;
-        }
-
-        if ($config->topP !== null) {
-            $params['top_p'] = $config->topP;
-        }
-
-        if ($config->maxOutputTokens !== null) {
-            $params['max_output_tokens'] = $config->maxOutputTokens;
-        }
-
-        if ($config->store !== null) {
-            $params['store'] = $config->store;
-        }
-
-        if ($config->include !== []) {
-            $params['include'] = $config->include;
-        }
-
-        return $params;
     }
 
     /**
@@ -294,54 +215,5 @@ class AiFormGenerationService
                 collect($aiData)->reject(fn (mixed $value, int|string $key): bool => array_key_exists((string) $key, $existingData))
             )
             ->toArray();
-    }
-
-    /**
-     * Call OpenAI API and validate the response.
-     *
-     * OpenAI Structured Outputs enforces schema at the API level,
-     * so we only need to check for incomplete/empty responses.
-     *
-     * @param  array<string, mixed>  $requestParams
-     */
-    protected function callOpenAi(array $requestParams): object
-    {
-        $response = OpenAI::responses()->create($requestParams);
-
-        // Check if response is incomplete
-        $status = property_exists($response, 'status') ? $response->status : null;
-        if ($status === 'incomplete') {
-            $incompleteDetails = property_exists($response, 'incompleteDetails') ? $response->incompleteDetails : null;
-            $reason = 'unknown';
-            if (is_object($incompleteDetails) && property_exists($incompleteDetails, 'reason')) {
-                $reasonValue = $incompleteDetails->reason;
-                $reason = is_scalar($reasonValue) ? (string) $reasonValue : 'unknown';
-            }
-            throw new RuntimeException('OpenAI response incomplete: '.$reason);
-        }
-
-        // Validate content exists
-        $content = property_exists($response, 'outputText') ? $response->outputText : null;
-
-        if ($content === null || $content === '') {
-            throw new RuntimeException('OpenAI returned no content');
-        }
-
-        return $response;
-    }
-
-    /**
-     * Build raw response metadata for logging.
-     *
-     * @return array<string, mixed>
-     */
-    protected function buildRawResponseMetadata(object $response): array
-    {
-        return [
-            'id' => $response->id ?? null,
-            'model' => $response->model ?? null,
-            'status' => $response->status ?? null,
-            'created' => $response->created ?? null,
-        ];
     }
 }
