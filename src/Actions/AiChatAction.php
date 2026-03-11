@@ -10,6 +10,8 @@ use Filament\Schemas\Components\Component;
 use Filament\Schemas\Components\Utilities\Set;
 use Filament\Support\Enums\Width;
 use Filament\Support\Icons\Heroicon;
+use Gwhthompson\FilamentAiForms\Agents\ChatStreamAgent;
+use Gwhthompson\FilamentAiForms\FilamentAiFormsPlugin;
 use Illuminate\Contracts\View\View;
 use Illuminate\Database\Eloquent\Model;
 use Livewire\Component as LivewireComponent;
@@ -26,6 +28,7 @@ use Override;
  * Textarea::make('description')
  *     ->suffixAction(
  *         AiChatAction::make()
+ *             ->agent(MyChatAgent::class)
  *             ->systemPrompt('You are a copywriter...')
  *             ->initialPrompt('Help me improve this description')
  *     )
@@ -38,6 +41,8 @@ class AiChatAction extends Action
     protected string|Closure|null $initialPromptProvider = null;
 
     protected string|Closure|null $contextPromptProvider = null;
+
+    protected string|Closure|null $agentProvider = null;
 
     public static function getDefaultName(): ?string
     {
@@ -70,6 +75,7 @@ class AiChatAction extends Action
                 $initialPrompt = $this->getInitialPrompt();
                 $systemPrompt = $this->getSystemPrompt();
                 $contextPrompt = $this->getContextPrompt();
+                $agentClass = $this->getAgentClass();
 
                 /** @var view-string $viewName */
                 $viewName = 'filament-ai-forms::actions.ai-chat-modal';
@@ -79,6 +85,7 @@ class AiChatAction extends Action
                     'initialPrompt' => $initialPrompt,
                     'systemPrompt' => $systemPrompt,
                     'contextPrompt' => $contextPrompt,
+                    'agentClass' => $agentClass,
                     'identifier' => $identifier,
                 ]);
             })
@@ -89,22 +96,20 @@ class AiChatAction extends Action
                 $rawContent = $livewire->aiChatContent ?? '';
                 $content = is_string($rawContent) ? $rawContent : '';
 
-                logger()->info('AiChatAction applying content', [
-                    'content_length' => strlen($content),
-                    'content_preview' => substr($content, 0, 100),
-                    'component_path' => $component->getStatePath(),
-                    'livewire_class' => $livewire::class,
-                ]);
-
                 if ($content === '') {
-                    logger()->warning('AiChatAction: Content is empty, not applying');
-
                     return;
                 }
 
                 $set($component, $content);
-                logger()->info('AiChatAction: Content applied successfully');
             });
+    }
+
+    /** Configure the Agent class for chat. */
+    public function agent(string|Closure $agent): static
+    {
+        $this->agentProvider = $agent;
+
+        return $this;
     }
 
     /** Configure the system prompt for AI. */
@@ -129,6 +134,33 @@ class AiChatAction extends Action
         $this->contextPromptProvider = $provider;
 
         return $this;
+    }
+
+    /** Get the resolved agent class. Action-level > plugin-level > config-level. */
+    public function getAgentClass(): string
+    {
+        if ($this->agentProvider !== null) {
+            if ($this->agentProvider instanceof Closure) {
+                $result = $this->evaluate($this->agentProvider);
+
+                return is_string($result) ? $result : ChatStreamAgent::class;
+            }
+
+            return $this->agentProvider;
+        }
+
+        try {
+            $pluginAgent = FilamentAiFormsPlugin::get()->getChatAgent();
+            if ($pluginAgent !== null) {
+                return $pluginAgent;
+            }
+        } catch (\Throwable) {
+            // No active panel (standalone use, tests) — fall through to config
+        }
+
+        $configValue = config('filament-ai-forms.agents.chat');
+
+        return is_string($configValue) ? $configValue : ChatStreamAgent::class;
     }
 
     /** Get the resolved system prompt. */

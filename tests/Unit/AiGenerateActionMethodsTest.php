@@ -72,7 +72,7 @@ describe('formatValue via closure', function (): void {
         expect($result)->toContain('Empty');
     });
 
-    it('handles zero as non-empty', function (): void {
+    it('handles zero as empty', function (): void {
         $action = AiGenerateAction::make();
         $result = callProtected($action, 'formatValue', 0);
 
@@ -117,7 +117,6 @@ describe('shouldBeVisible via closure', function (): void {
 describe('extractComponents with null livewire', function (): void {
     it('returns empty array when getLivewire returns null', function (): void {
         $action = AiGenerateAction::make();
-        // Action not mounted on Livewire - getLivewire() returns null
         $result = callProtected($action, 'extractComponents');
 
         expect($result)->toBe([]);
@@ -127,7 +126,6 @@ describe('extractComponents with null livewire', function (): void {
 describe('getExistingData with null livewire', function (): void {
     it('returns empty array when getLivewire returns null', function (): void {
         $action = AiGenerateAction::make();
-        // Action not mounted on Livewire - getLivewire() returns null
         $result = callProtected($action, 'getExistingData');
 
         expect($result)->toBe([]);
@@ -137,7 +135,6 @@ describe('getExistingData with null livewire', function (): void {
 describe('handleAction with null livewire', function (): void {
     it('returns null when getLivewire returns null', function (): void {
         $action = AiGenerateAction::make();
-        // Action not mounted on Livewire - getLivewire() returns null
         $result = callProtected($action, 'handleAction', [
             'generated_data' => '{"name":"Test"}',
             'selected_fields' => '["name"]',

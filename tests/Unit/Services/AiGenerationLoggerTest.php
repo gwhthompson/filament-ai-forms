@@ -57,7 +57,6 @@ describe('AiGenerationLogger', function (): void {
                 duration: 1.5,
                 model: 'gpt-4.1-mini',
                 fieldsGenerated: 1,
-                responseId: 'resp_test123',
                 systemPrompt: 'You are helpful',
                 userPrompt: 'Generate a title',
             );
@@ -71,7 +70,6 @@ describe('AiGenerationLogger', function (): void {
             expect($content)
                 ->toContain('# AI Generation Log')
                 ->toContain('gpt-4.1-mini')
-                ->toContain('resp_test123')
                 ->toContain('Generated Title');
         });
 

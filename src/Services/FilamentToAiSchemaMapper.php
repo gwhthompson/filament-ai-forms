@@ -27,9 +27,9 @@ class FilamentToAiSchemaMapper
     /**
      * @param  array<int, Component>  $components
      * @param  array<int, string>|null  $selectedFields  Filter to only these field names (null = all fields)
-     * @return array{schema: array<string, mixed>, systemPrompt: string, userPrompt: string}
+     * @return array{schema: array<string, mixed>, systemPrompt: string}
      */
-    public function buildOpenAiConfig(array $components, string $basePrompt = '', ?array $selectedFields = null): array
+    public function buildSchemaConfig(array $components, string $basePrompt = '', ?array $selectedFields = null): array
     {
         /** @var array<string, array<string, mixed>> $properties */
         $properties = [];
@@ -68,7 +68,6 @@ class FilamentToAiSchemaMapper
                 'additionalProperties' => false,
             ],
             'systemPrompt' => $this->buildSystemPrompt($basePrompt),
-            'userPrompt' => '',
         ];
     }
 
@@ -223,14 +222,14 @@ class FilamentToAiSchemaMapper
         $rules = $this->parseValidationRules($component);
 
         foreach ($rules as $rule) {
-            // Only keep format handling - minLength/maxLength NOT supported by OpenAI Structured Outputs
+            // Only keep format handling - minLength/maxLength NOT supported by structured outputs
             if (is_string($rule) && isset(self::VALIDATION_FORMAT_MAPPING[$rule])) {
                 $schema['format'] = self::VALIDATION_FORMAT_MAPPING[$rule];
             }
         }
 
         // Use pattern from aiSchema() if provided
-        // Pattern IS supported by OpenAI Structured Outputs
+        // Pattern IS supported by structured outputs
         if ($pattern = $component->getAiPattern()) {
             $schema['pattern'] = $pattern;
         }

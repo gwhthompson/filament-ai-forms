@@ -77,7 +77,7 @@ describe('Form Component Integration', function (): void {
         $components = getFormComponents();
 
         $mapper = app(FilamentToAiSchemaMapper::class);
-        $config = $mapper->buildOpenAiConfig($components);
+        $config = $mapper->buildSchemaConfig($components);
 
         expect($config['schema']['properties'])
             ->toHaveKey('name')
@@ -89,7 +89,7 @@ describe('Form Component Integration', function (): void {
         $components = getFormComponents();
 
         $mapper = app(FilamentToAiSchemaMapper::class);
-        $config = $mapper->buildOpenAiConfig($components);
+        $config = $mapper->buildSchemaConfig($components);
 
         expect($config['schema']['properties']['count']['type'])->toBe('integer');
     });
@@ -98,7 +98,7 @@ describe('Form Component Integration', function (): void {
         $components = getFormComponents();
 
         $mapper = app(FilamentToAiSchemaMapper::class);
-        $config = $mapper->buildOpenAiConfig($components);
+        $config = $mapper->buildSchemaConfig($components);
 
         expect($config['schema']['properties']['count'])
             ->toHaveKey('minimum', 1)
@@ -109,7 +109,7 @@ describe('Form Component Integration', function (): void {
         $components = getFormComponents();
 
         $mapper = app(FilamentToAiSchemaMapper::class);
-        $config = $mapper->buildOpenAiConfig($components);
+        $config = $mapper->buildSchemaConfig($components);
 
         expect($config['schema']['properties']['optional_note']['type'])
             ->toBe(['string', 'null']);
@@ -119,7 +119,7 @@ describe('Form Component Integration', function (): void {
         $components = getFormComponents();
 
         $mapper = app(FilamentToAiSchemaMapper::class);
-        $config = $mapper->buildOpenAiConfig($components);
+        $config = $mapper->buildSchemaConfig($components);
 
         expect($config['schema']['properties']['email']['format'])->toBe('email');
     });
@@ -128,7 +128,7 @@ describe('Form Component Integration', function (): void {
         $components = getFormComponents();
 
         $mapper = app(FilamentToAiSchemaMapper::class);
-        $config = $mapper->buildOpenAiConfig($components);
+        $config = $mapper->buildSchemaConfig($components);
 
         expect($config['schema']['properties']['is_active']['type'])->toBe('boolean');
     });
@@ -137,7 +137,7 @@ describe('Form Component Integration', function (): void {
         $components = getFormComponents();
 
         $mapper = app(FilamentToAiSchemaMapper::class);
-        $config = $mapper->buildOpenAiConfig($components);
+        $config = $mapper->buildSchemaConfig($components);
 
         expect($config['schema']['properties']['optional_status']['type'])
             ->toBe(['string', 'null']);

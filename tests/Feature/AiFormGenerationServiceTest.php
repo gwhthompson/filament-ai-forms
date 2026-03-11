@@ -5,13 +5,12 @@ declare(strict_types=1);
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
+use Gwhthompson\FilamentAiForms\Agents\FormGenerationAgent;
 use Gwhthompson\FilamentAiForms\Data\AiGenerationConfig;
 use Gwhthompson\FilamentAiForms\Services\AiFormGenerationService;
-use Gwhthompson\FilamentAiForms\Tests\Traits\MocksOpenAi;
-use OpenAI\Laravel\Facades\OpenAI;
-use OpenAI\Resources\Responses;
+use Gwhthompson\FilamentAiForms\Tests\Traits\MocksAgent;
 
-uses(MocksOpenAi::class);
+uses(MocksAgent::class);
 
 beforeEach(function (): void {
     $this->service = app(AiFormGenerationService::class);
@@ -33,15 +32,12 @@ describe('AiFormGenerationService', function (): void {
                 ),
         ];
 
-        $this->mockOpenAiSuccess([
+        $this->mockFormGenerationSuccess([
             'name' => 'Acme Corporation',
             'description' => 'A leading technology company.',
         ]);
 
-        $config = AiGenerationConfig::from([
-            'model' => 'gpt-4.1-mini',
-            'temperature' => 0.1,
-        ]);
+        $config = AiGenerationConfig::from([]);
 
         $result = $this->service->generate(
             config: $config,
@@ -53,6 +49,8 @@ describe('AiFormGenerationService', function (): void {
             ->and($result->data['name'])->toBe('Acme Corporation')
             ->and($result->data['description'])->toBe('A leading technology company.')
             ->and($result->fieldsGenerated)->toBe(2);
+
+        FormGenerationAgent::assertPrompted(fn ($prompt) => str_contains($prompt->prompt, 'example.com'));
     });
 
     it('generates data for selected fields only', function (): void {
@@ -65,14 +63,12 @@ describe('AiFormGenerationService', function (): void {
                 ->aiSchema(enabled: true, description: 'Phone'),
         ];
 
-        $this->mockOpenAiSuccess([
+        $this->mockFormGenerationSuccess([
             'name' => 'John Doe',
             'email' => 'john@example.com',
         ]);
 
-        $config = AiGenerationConfig::from([
-            'model' => 'gpt-4.1-mini',
-        ]);
+        $config = AiGenerationConfig::from([]);
 
         $result = $this->service->generate(
             config: $config,
@@ -99,13 +95,11 @@ describe('AiFormGenerationService', function (): void {
                 ),
         ];
 
-        $this->mockOpenAiSuccess([
+        $this->mockFormGenerationSuccess([
             'status' => 'active',
         ]);
 
-        $config = AiGenerationConfig::from([
-            'model' => 'gpt-4.1-mini',
-        ]);
+        $config = AiGenerationConfig::from([]);
 
         $result = $this->service->generate(
             config: $config,
@@ -115,92 +109,59 @@ describe('AiFormGenerationService', function (): void {
         expect($result->data['status'])->toBe('active');
     });
 
-    it('throws exception on incomplete response', function (): void {
+    it('throws exception when agent fails', function (): void {
         $components = [
             TextInput::make('name')->aiSchema(enabled: true),
         ];
 
-        $this->mockOpenAiIncomplete('max_output_tokens');
+        $this->mockFormGenerationException('AI service unavailable');
 
-        $config = AiGenerationConfig::from([
-            'model' => 'gpt-4.1-mini',
-        ]);
+        $config = AiGenerationConfig::from([]);
 
         expect(fn () => $this->service->generate(
             config: $config,
             components: $components,
-        ))->toThrow(RuntimeException::class, 'OpenAI response incomplete');
+        ))->toThrow(RuntimeException::class, 'AI service unavailable');
     });
 
-    it('throws exception on incomplete response with unknown reason when details missing', function (): void {
+    it('wraps timeout exceptions', function (): void {
         $components = [
             TextInput::make('name')->aiSchema(enabled: true),
         ];
 
-        $this->mockOpenAiIncompleteNoDetails();
+        $this->mockFormGenerationException('Connection timeout occurred');
 
-        $config = AiGenerationConfig::from([
-            'model' => 'gpt-4.1-mini',
-        ]);
+        $config = AiGenerationConfig::from([]);
 
         expect(fn () => $this->service->generate(
             config: $config,
             components: $components,
-        ))->toThrow(RuntimeException::class, 'OpenAI response incomplete: unknown');
+        ))->toThrow(\Gwhthompson\FilamentAiForms\Exceptions\AiServiceTimeoutException::class);
     });
 
-    it('throws exception on null content', function (): void {
+    it('uses fallback prompt when no URL in context', function (): void {
         $components = [
-            TextInput::make('name')->aiSchema(enabled: true),
+            TextInput::make('name')
+                ->aiSchema(
+                    enabled: true,
+                    description: 'A person name',
+                ),
         ];
 
-        $this->mockOpenAiNullContent();
-
-        $config = AiGenerationConfig::from([
-            'model' => 'gpt-4.1-mini',
+        $this->mockFormGenerationSuccess([
+            'name' => 'Generated Name',
         ]);
 
-        expect(fn () => $this->service->generate(
+        $config = AiGenerationConfig::from([]);
+
+        $result = $this->service->generate(
             config: $config,
             components: $components,
-        ))->toThrow(RuntimeException::class, 'OpenAI returned no content');
-    });
+            context: [],
+        );
 
-    it('throws exception on empty content', function (): void {
-        $components = [
-            TextInput::make('name')->aiSchema(enabled: true),
-        ];
-
-        $this->mockOpenAiEmptyContent();
-
-        $config = AiGenerationConfig::from([
-            'model' => 'gpt-4.1-mini',
-        ]);
-
-        expect(fn () => $this->service->generate(
-            config: $config,
-            components: $components,
-        ))->toThrow(RuntimeException::class, 'OpenAI returned no content');
-    });
-
-    it('throws exception on non-array JSON response', function (): void {
-        // Disable retries completely for this test
-        config()->set('filament-ai-forms.retry.max_attempts', 0);
-
-        $components = [
-            TextInput::make('name')->aiSchema(enabled: true),
-        ];
-
-        $this->mockOpenAiNonArrayJson('"just a plain string"');
-
-        $config = AiGenerationConfig::from([
-            'model' => 'gpt-4.1-mini',
-        ]);
-
-        expect(fn () => $this->service->generate(
-            config: $config,
-            components: $components,
-        ))->toThrow(RuntimeException::class, 'OpenAI returned invalid JSON');
+        expect($result->data['name'])->toBe('Generated Name')
+            ->and($result->userPrompt)->toBe('Please generate the following data:');
     });
 
     it('includes context in generation', function (): void {
@@ -212,13 +173,11 @@ describe('AiFormGenerationService', function (): void {
                 ),
         ];
 
-        $this->mockOpenAiSuccess([
+        $this->mockFormGenerationSuccess([
             'name' => 'Example Company',
         ]);
 
-        $config = AiGenerationConfig::from([
-            'model' => 'gpt-4.1-mini',
-        ]);
+        $config = AiGenerationConfig::from([]);
 
         $result = $this->service->generate(
             config: $config,
@@ -233,157 +192,12 @@ describe('AiFormGenerationService', function (): void {
     });
 });
 
-describe('AiFormGenerationService response validation', function (): void {
-    it('throws exception when OpenAI returns non-array JSON', function (): void {
-        // OpenAI Structured Outputs should always return valid JSON objects,
-        // but if it returns a scalar JSON value, we throw immediately
-        $components = [
-            TextInput::make('name')
-                ->aiSchema(enabled: true, description: 'Name'),
-        ];
-
-        $this->mockOpenAiNonArrayJson('"just a string"');
-
-        $config = AiGenerationConfig::from([
-            'model' => 'gpt-4.1-mini',
-        ]);
-
-        expect(fn () => $this->service->generate(
-            config: $config,
-            components: $components,
-        ))->toThrow(RuntimeException::class, 'OpenAI returned invalid JSON');
-    });
-
-    it('returns valid response with multiple fields', function (): void {
-        $components = [
-            TextInput::make('name')
-                ->aiSchema(enabled: true, description: 'Name'),
-            Textarea::make('description')
-                ->aiSchema(enabled: true, description: 'Description'),
-        ];
-
-        $this->mockOpenAiSuccess([
-            'name' => 'Test Company',
-            'description' => 'A valid description.',
-        ]);
-
-        $config = AiGenerationConfig::from([
-            'model' => 'gpt-4.1-mini',
-        ]);
-
-        $result = $this->service->generate(
-            config: $config,
-            components: $components,
-        );
-
-        expect($result->data['name'])->toBe('Test Company')
-            ->and($result->data['description'])->toBe('A valid description.');
-    });
-});
-
-describe('AiFormGenerationService optional config params', function (): void {
-    it('includes topP in request when set', function (): void {
-        $components = [
-            TextInput::make('name')->aiSchema(enabled: true, description: 'Name'),
-        ];
-
-        $this->mockOpenAiSuccess(['name' => 'Generated']);
-
-        $config = AiGenerationConfig::from([
-            'model' => 'gpt-4.1-mini',
-            'topP' => 0.9,
-        ]);
-
-        $this->service->generate(config: $config, components: $components);
-
-        OpenAI::assertSent(Responses::class, fn (string $method, array $params): bool => $method === 'create' && isset($params['top_p']) && $params['top_p'] === 0.9
-        );
-    });
-
-    it('includes maxOutputTokens in request when set', function (): void {
-        $components = [
-            TextInput::make('name')->aiSchema(enabled: true, description: 'Name'),
-        ];
-
-        $this->mockOpenAiSuccess(['name' => 'Generated']);
-
-        $config = AiGenerationConfig::from([
-            'model' => 'gpt-4.1-mini',
-            'maxOutputTokens' => 2000,
-        ]);
-
-        $this->service->generate(config: $config, components: $components);
-
-        OpenAI::assertSent(Responses::class, fn (string $method, array $params): bool => $method === 'create' && isset($params['max_output_tokens']) && $params['max_output_tokens'] === 2000
-        );
-    });
-
-    it('includes store in request when set', function (): void {
-        $components = [
-            TextInput::make('name')->aiSchema(enabled: true, description: 'Name'),
-        ];
-
-        $this->mockOpenAiSuccess(['name' => 'Generated']);
-
-        $config = AiGenerationConfig::from([
-            'model' => 'gpt-4.1-mini',
-            'store' => true,
-        ]);
-
-        $this->service->generate(config: $config, components: $components);
-
-        OpenAI::assertSent(Responses::class, fn (string $method, array $params): bool => $method === 'create' && isset($params['store']) && $params['store'] === true
-        );
-    });
-
-    it('includes include array in request when set', function (): void {
-        $components = [
-            TextInput::make('name')->aiSchema(enabled: true, description: 'Name'),
-        ];
-
-        $this->mockOpenAiSuccess(['name' => 'Generated']);
-
-        $config = AiGenerationConfig::from([
-            'model' => 'gpt-4.1-mini',
-            'include' => ['usage', 'reasoning'],
-        ]);
-
-        $this->service->generate(config: $config, components: $components);
-
-        OpenAI::assertSent(Responses::class, fn (string $method, array $params): bool => $method === 'create' && isset($params['include']) && $params['include'] === ['usage', 'reasoning']
-        );
-    });
-
-    it('excludes optional params when not set', function (): void {
-        $components = [
-            TextInput::make('name')->aiSchema(enabled: true, description: 'Name'),
-        ];
-
-        $this->mockOpenAiSuccess(['name' => 'Generated']);
-
-        $config = AiGenerationConfig::from([
-            'model' => 'gpt-4.1-mini',
-        ]);
-
-        $this->service->generate(config: $config, components: $components);
-
-        OpenAI::assertSent(Responses::class, fn (string $method, array $params): bool => $method === 'create'
-            && ! isset($params['top_p'])
-            && ! isset($params['max_output_tokens'])
-            && ! isset($params['store'])
-            && ! isset($params['include'])
-        );
-    });
-});
-
 describe('mergeWithExistingData', function (): void {
     it('replaces existing data in replace mode', function (): void {
-        $service = app(AiFormGenerationService::class);
-
         $aiData = ['name' => 'New Name', 'email' => 'new@example.com'];
         $existing = ['name' => 'Old Name', 'phone' => '123456'];
 
-        $result = $service->mergeWithExistingData($aiData, $existing, 'replace');
+        $result = $this->service->mergeWithExistingData($aiData, $existing, 'replace');
 
         expect($result)->toBe([
             'name' => 'New Name',
@@ -392,25 +206,30 @@ describe('mergeWithExistingData', function (): void {
     });
 
     it('merges data keeping non-empty existing values in merge mode', function (): void {
-        $service = app(AiFormGenerationService::class);
-
         $aiData = ['name' => 'AI Name', 'email' => 'ai@example.com', 'bio' => 'AI Bio'];
         $existing = ['name' => 'Existing Name', 'email' => '', 'phone' => '123456'];
 
-        $result = $service->mergeWithExistingData($aiData, $existing, 'merge');
+        $result = $this->service->mergeWithExistingData($aiData, $existing, 'merge');
 
         expect($result['name'])->toBe('Existing Name')
             ->and($result['email'])->toBe('ai@example.com')
             ->and($result['bio'])->toBe('AI Bio');
     });
 
-    it('only fills empty fields in enhance mode', function (): void {
-        $service = app(AiFormGenerationService::class);
+    it('defaults to replace for invalid merge mode', function (): void {
+        $aiData = ['name' => 'AI Name', 'email' => 'ai@example.com'];
+        $existing = ['name' => 'Existing Name', 'phone' => '123456'];
 
+        $result = $this->service->mergeWithExistingData($aiData, $existing, 'invalid_mode');
+
+        expect($result)->toBe($aiData);
+    });
+
+    it('only fills empty fields in enhance mode', function (): void {
         $aiData = ['name' => 'AI Name', 'email' => 'ai@example.com'];
         $existing = ['name' => 'Existing Name', 'email' => ''];
 
-        $result = $service->mergeWithExistingData($aiData, $existing, 'enhance');
+        $result = $this->service->mergeWithExistingData($aiData, $existing, 'enhance');
 
         expect($result['name'])->toBe('Existing Name')
             ->and($result['email'])->toBe('ai@example.com');

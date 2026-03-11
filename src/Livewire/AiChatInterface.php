@@ -4,13 +4,15 @@ declare(strict_types=1);
 
 namespace Gwhthompson\FilamentAiForms\Livewire;
 
-use Gwhthompson\FilamentAiForms\Data\AiGenerationConfig;
-use Gwhthompson\FilamentAiForms\Services\StreamingResponseHandler;
+use Gwhthompson\FilamentAiForms\Agents\ChatStreamAgent;
 use Illuminate\Contracts\View\View;
+use Laravel\Ai\Messages\Message;
+use Laravel\Ai\Messages\MessageRole;
+use Laravel\Ai\Streaming\Events\TextDelta;
 use Livewire\Attributes\Locked;
 use Livewire\Attributes\Modelable;
 use Livewire\Component;
-use OpenAI\Laravel\Facades\OpenAI;
+use RuntimeException;
 use Throwable;
 
 /**
@@ -30,7 +32,7 @@ class AiChatInterface extends Component
 
     public string $userInput = '';
 
-    public ?string $currentGeneratedContent = '';
+    public string $currentGeneratedContent = '';
 
     public string $streamingContent = '';
 
@@ -41,7 +43,7 @@ class AiChatInterface extends Component
     public string $contextPrompt = '';
 
     #[Locked]
-    public string $model = '';
+    public string $agentClass = ChatStreamAgent::class;
 
     #[Locked]
     public string $regeneratePrompt = 'Generate fresh content based on the context.';
@@ -56,14 +58,13 @@ class AiChatInterface extends Component
         string $initialPrompt = '',
         string $systemPrompt = 'You are a helpful AI assistant.',
         string $contextPrompt = '',
-        ?string $model = null,
+        ?string $agentClass = null,
         ?string $regeneratePrompt = null,
     ): void {
         $this->content = $currentContent;
         $this->systemPrompt = $systemPrompt;
         $this->contextPrompt = $contextPrompt;
-        $defaultModel = config('filament-ai-forms.model', 'gpt-4.1-mini');
-        $this->model = $model ?? (is_string($defaultModel) ? $defaultModel : 'gpt-4.1-mini');
+        $this->agentClass = $agentClass ?? ChatStreamAgent::class;
         $this->regeneratePrompt = $regeneratePrompt ?? $this->regeneratePrompt;
         $this->messages = [];
         $this->generating = false;
@@ -151,46 +152,46 @@ class AiChatInterface extends Component
     protected function performGenerationInternal(array $messages): void
     {
         try {
-            $inputMessages = [];
+            // Build conversation history (all messages EXCEPT the latest user message)
+            $allMessages = $messages;
+            $latestMessage = array_pop($allMessages);
 
-            // Prepend brief context as first user message (AI sees this as background)
+            if ($latestMessage === null) {
+                throw new RuntimeException('No messages to process');
+            }
+
+            $conversationHistory = [];
+
             if ($this->contextPrompt !== '') {
-                $inputMessages[] = [
-                    'role' => 'user',
-                    'content' => $this->contextPrompt,
-                ];
+                $conversationHistory[] = new Message(MessageRole::User, $this->contextPrompt);
             }
 
-            foreach ($messages as $message) {
-                $inputMessages[] = [
-                    'role' => $message['role'],
-                    'content' => $message['content'],
-                ];
+            foreach ($allMessages as $msg) {
+                $role = MessageRole::tryFrom($msg['role']) ?? MessageRole::User;
+                $conversationHistory[] = new Message($role, $msg['content']);
             }
 
-            // Build request params from unified config
-            $config = new AiGenerationConfig(
-                model: $this->model,
-                useWebSearch: false,
+            // Create agent with conversation history via Conversational interface
+            /** @var ChatStreamAgent $agent */
+            $agent = new ($this->agentClass)(
+                systemInstructions: $this->systemPrompt,
+                conversationHistory: $conversationHistory,
             );
-            $requestParams = $config->toRequestParams($inputMessages);
-            $requestParams['instructions'] = $this->systemPrompt;
-            $requestParams['stream'] = true;
 
-            $stream = OpenAI::responses()->createStreamed($requestParams);
+            // Stream the latest user message
+            $stream = $agent->stream($latestMessage['content']);
+            $fullContent = '';
 
-            // Use unified streaming handler
-            $handler = app(StreamingResponseHandler::class);
+            // Forward TextDelta events to Livewire's wire:stream
+            /** @var iterable<mixed> $stream */
+            foreach ($stream as $event) {
+                if ($event instanceof TextDelta) {
+                    $fullContent .= $event->delta;
+                    $this->streamingContent .= $event->delta;
 
-            $fullContent = $handler->handle(
-                stream: $stream,
-                onDelta: function (string $delta, string $accumulated): void {
-                    $this->streamingContent .= $delta;
-
-                    // Stream to static target for real-time updates
-                    $this->stream(to: 'ai-streaming', content: $delta, replace: false);
+                    $this->stream(to: 'ai-streaming', content: $event->delta, replace: false);
                 }
-            );
+            }
 
             // Add completed message to chat history
             $this->messages[] = [
@@ -211,8 +212,6 @@ class AiChatInterface extends Component
                 'error' => $throwable->getMessage(),
                 'exception' => $throwable::class,
                 'trace' => $throwable->getTraceAsString(),
-                'messages_count' => count($inputMessages),
-                'last_user_message' => end($inputMessages)['content'] ?? null,
             ]);
             $this->streamingContent = '';
             $this->errorMessage = 'Failed to generate response. Please try again.';

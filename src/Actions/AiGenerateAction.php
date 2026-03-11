@@ -19,6 +19,8 @@ use Filament\Schemas\Contracts\HasSchemas;
 use Filament\Support\Icons\Heroicon;
 use Gwhthompson\FilamentAiForms\Data\AiFieldMetadata;
 use Gwhthompson\FilamentAiForms\Data\AiGenerationConfig;
+use Gwhthompson\FilamentAiForms\Exceptions\AiGenerationException;
+use Gwhthompson\FilamentAiForms\FilamentAiFormsPlugin;
 use Gwhthompson\FilamentAiForms\Services\AiFormGenerationService;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\HtmlString;
@@ -36,22 +38,16 @@ use Throwable;
  * Usage:
  * ```php
  * AiGenerateAction::make()
- *     ->aiModel('gpt-4.1-mini')
+ *     ->agent(MyFormAgent::class)
  *     ->systemPrompt('You are a specialist...')
  *     ->contextProvider(fn($action) => ['url' => $action->getRecord()->website])
  * ```
  */
 class AiGenerateAction extends Action
 {
-    protected ?string $aiModel = null;
+    protected string|Closure|null $agentProvider = null;
 
-    protected ?float $temperature = null;
-
-    protected ?int $maxTokens = null;
-
-    protected ?string $systemPrompt = null;
-
-    protected ?bool $useWebSearch = null;
+    protected string|Closure|null $systemPrompt = null;
 
     protected ?bool $logEnabled = null;
 
@@ -61,9 +57,10 @@ class AiGenerateAction extends Action
 
     protected ?Closure $afterGeneration = null;
 
-    protected ?Closure $onOptionsResolution = null;
-
     protected ?Closure $contextProvider = null;
+
+    /** @var array<int, mixed> */
+    protected array $tools = [];
 
     public static function getDefaultName(): ?string
     {
@@ -88,42 +85,18 @@ class AiGenerateAction extends Action
             });
     }
 
-    /** Configure AI model (e.g., 'gpt-4.1-mini', 'gpt-4o'). */
-    public function aiModel(string $model): static
+    /** Configure the Agent class for generation. */
+    public function agent(string|Closure $agent): static
     {
-        $this->aiModel = $model;
-
-        return $this;
-    }
-
-    /** Configure temperature. */
-    public function temperature(float $temperature): static
-    {
-        $this->temperature = $temperature;
-
-        return $this;
-    }
-
-    /** Configure max tokens. */
-    public function maxTokens(int $maxTokens): static
-    {
-        $this->maxTokens = $maxTokens;
+        $this->agentProvider = $agent;
 
         return $this;
     }
 
     /** Configure system prompt. */
-    public function systemPrompt(string $prompt): static
+    public function systemPrompt(string|Closure $prompt): static
     {
         $this->systemPrompt = $prompt;
-
-        return $this;
-    }
-
-    /** Configure web search. */
-    public function useWebSearch(bool $enabled = true): static
-    {
-        $this->useWebSearch = $enabled;
 
         return $this;
     }
@@ -161,18 +134,6 @@ class AiGenerateAction extends Action
     }
 
     /**
-     * Hook for resolving field options (e.g., tags, enums).
-     *
-     * Callback receives field name and should return array of options or null.
-     */
-    public function onOptionsResolution(Closure $callback): static
-    {
-        $this->onOptionsResolution = $callback;
-
-        return $this;
-    }
-
-    /**
      * Hook for providing custom context.
      *
      * Callback receives action instance and should return context array.
@@ -184,11 +145,64 @@ class AiGenerateAction extends Action
         return $this;
     }
 
+    /**
+     * Configure tools for the default agent (e.g., WebSearch).
+     *
+     * @param  array<int, mixed>  $tools
+     */
+    public function tools(array $tools): static
+    {
+        $this->tools = $tools;
+
+        return $this;
+    }
+
+    /** Resolve the agent class. Action-level > plugin-level > config-level. */
+    protected function resolveAgentClass(): ?string
+    {
+        if ($this->agentProvider !== null) {
+            if ($this->agentProvider instanceof Closure) {
+                $result = $this->evaluate($this->agentProvider);
+
+                return is_string($result) ? $result : null;
+            }
+
+            return $this->agentProvider;
+        }
+
+        try {
+            $pluginAgent = FilamentAiFormsPlugin::get()->getAgent();
+            if ($pluginAgent !== null) {
+                return $pluginAgent;
+            }
+        } catch (\Throwable) {
+            // No active panel (standalone use, tests) — fall through to config
+        }
+
+        $configValue = config('filament-ai-forms.agents.generation');
+
+        return is_string($configValue) ? $configValue : null;
+    }
+
+    /** Resolve the system prompt, evaluating closures via Filament's evaluate(). */
+    private function resolveSystemPrompt(): ?string
+    {
+        if ($this->systemPrompt === null) {
+            return null;
+        }
+
+        if ($this->systemPrompt instanceof Closure) {
+            $result = $this->evaluate($this->systemPrompt);
+
+            return is_string($result) ? $result : null;
+        }
+
+        return $this->systemPrompt;
+    }
+
     /** Check if action should be visible. */
     protected function shouldBeVisible(): bool
     {
-        // Always visible on Create page
-        // On Edit page, implement custom visibility logic via closure if needed
         return $this->isEditPage();
     }
 
@@ -253,7 +267,6 @@ class AiGenerateAction extends Action
     {
         $aiFields = $this->extractFieldMetadata();
         $existingData = $this->getExistingData();
-        $this->isEditPage();
 
         $schema = [];
 
@@ -312,22 +325,12 @@ class AiGenerateAction extends Action
             // Get components
             $components = $this->extractComponents();
 
-            // Build configuration with proper type guards for config() returns
-            $modelConfig = config('filament-ai-forms.model', 'gpt-4.1-mini');
-            $tempConfig = config('filament-ai-forms.temperature', 0.05);
-            $tokensConfig = config('filament-ai-forms.max_output_tokens', 3000);
-            $webSearchConfig = config('filament-ai-forms.web_search.enabled', true);
-            $logEnabledConfig = config('filament-ai-forms.logging.enabled', true);
-            $logPathConfig = config('filament-ai-forms.logging.path', '');
-
             $config = AiGenerationConfig::from([
-                'model' => $this->aiModel ?? (is_string($modelConfig) ? $modelConfig : 'gpt-4.1-mini'),
-                'temperature' => $this->temperature ?? (is_numeric($tempConfig) ? (float) $tempConfig : 0.05),
-                'maxTokens' => $this->maxTokens ?? (is_numeric($tokensConfig) ? (int) $tokensConfig : 3000),
-                'systemPrompt' => $this->systemPrompt,
-                'useWebSearch' => $this->useWebSearch ?? (is_bool($webSearchConfig) ? $webSearchConfig : true),
-                'logEnabled' => $this->logEnabled ?? (is_bool($logEnabledConfig) ? $logEnabledConfig : true),
-                'logPath' => $this->logPath ?? (is_string($logPathConfig) ? $logPathConfig : ''),
+                'agentClass' => $this->resolveAgentClass(),
+                'systemPrompt' => $this->resolveSystemPrompt(),
+                'logEnabled' => $this->logEnabled ?? (bool) config('filament-ai-forms.logging.enabled', true),
+                'logPath' => $this->logPath,
+                'tools' => $this->tools,
             ]);
 
             // Call AI service
@@ -350,7 +353,6 @@ class AiGenerateAction extends Action
             $set('selected_fields', json_encode($selectedFields));
 
             // Pre-populate checkbox states so Alpine.js buttons can find them
-            // (->default() alone doesn't register keys in $wire.mountedActions[0].data)
             foreach ($selectedFields as $fieldName) {
                 if (array_key_exists($fieldName, $result->data)) {
                     $set("accept_{$fieldName}", true);
@@ -367,12 +369,9 @@ class AiGenerateAction extends Action
                 'error_class' => $throwable::class,
             ]);
 
-            $userMessage = match (true) {
-                str_contains($throwable->getMessage(), 'OpenAI') => 'AI service error: '.$throwable->getMessage(),
-                str_contains($throwable->getMessage(), 'timeout') => 'The AI service took too long to respond. Please try again.',
-                str_contains($throwable->getMessage(), 'JSON') => 'Failed to parse AI response. Please try again.',
-                default => 'An unexpected error occurred: '.$throwable->getMessage(),
-            };
+            $userMessage = $throwable instanceof AiGenerationException
+                ? $throwable->getUserMessage()
+                : 'An unexpected error occurred: '.$throwable->getMessage();
 
             Notification::make()
                 ->danger()

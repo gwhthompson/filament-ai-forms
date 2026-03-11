@@ -2,16 +2,15 @@
 
 declare(strict_types=1);
 
+use Gwhthompson\FilamentAiForms\Agents\ChatStreamAgent;
 use Gwhthompson\FilamentAiForms\Livewire\AiChatInterface;
-use Gwhthompson\FilamentAiForms\Tests\Traits\MocksOpenAi;
-use OpenAI\Laravel\Facades\OpenAI;
-use OpenAI\Resources\Responses;
+use Gwhthompson\FilamentAiForms\Tests\Traits\MocksAgent;
 
 use function Pest\Livewire\livewire;
 
 covers(AiChatInterface::class);
 
-uses(MocksOpenAi::class);
+uses(MocksAgent::class);
 
 describe('AiChatInterface', function (): void {
     describe('mount behavior', function (): void {
@@ -46,16 +45,14 @@ describe('AiChatInterface', function (): void {
                 ->assertSet('userInput', 'Make it more engaging');
         });
 
-        it('uses custom model when provided', function (): void {
-            livewire(AiChatInterface::class, ['model' => 'gpt-4o'])
-                ->assertSet('model', 'gpt-4o');
+        it('uses custom agent class when provided', function (): void {
+            livewire(AiChatInterface::class, ['agentClass' => ChatStreamAgent::class])
+                ->assertSet('agentClass', ChatStreamAgent::class);
         });
 
-        it('uses default model from config when not specified', function (): void {
-            config(['filament-ai-forms.model' => 'gpt-4.1-mini']);
-
+        it('uses default agent class when not specified', function (): void {
             livewire(AiChatInterface::class)
-                ->assertSet('model', 'gpt-4.1-mini');
+                ->assertSet('agentClass', ChatStreamAgent::class);
         });
     });
 
@@ -274,7 +271,7 @@ describe('AiChatInterface', function (): void {
 
     describe('startStreaming', function (): void {
         it('adds assistant response to messages', function (): void {
-            $this->mockOpenAiStreamSuccess('Generated text');
+            $this->mockChatStreamSuccess('Generated text');
 
             $messages = [
                 ['role' => 'user', 'content' => 'Test prompt', 'timestamp' => now()->toIso8601String()],
@@ -289,7 +286,7 @@ describe('AiChatInterface', function (): void {
         });
 
         it('updates currentGeneratedContent after streaming', function (): void {
-            $this->mockOpenAiStreamSuccess('New content');
+            $this->mockChatStreamSuccess('New content');
 
             $messages = [
                 ['role' => 'user', 'content' => 'Generate something', 'timestamp' => now()->toIso8601String()],
@@ -302,7 +299,7 @@ describe('AiChatInterface', function (): void {
         });
 
         it('updates content property after streaming', function (): void {
-            $this->mockOpenAiStreamSuccess('Updated content');
+            $this->mockChatStreamSuccess('Updated content');
 
             $messages = [
                 ['role' => 'user', 'content' => 'Update', 'timestamp' => now()->toIso8601String()],
@@ -315,7 +312,7 @@ describe('AiChatInterface', function (): void {
         });
 
         it('clears streamingContent after completion', function (): void {
-            $this->mockOpenAiStreamSuccess('Final response');
+            $this->mockChatStreamSuccess('Final response');
 
             $messages = [
                 ['role' => 'user', 'content' => 'Test', 'timestamp' => now()->toIso8601String()],
@@ -329,7 +326,7 @@ describe('AiChatInterface', function (): void {
         });
 
         it('sets generating to false after completion', function (): void {
-            $this->mockOpenAiStreamSuccess('Done');
+            $this->mockChatStreamSuccess('Done');
 
             $messages = [
                 ['role' => 'user', 'content' => 'Test', 'timestamp' => now()->toIso8601String()],
@@ -343,7 +340,7 @@ describe('AiChatInterface', function (): void {
         });
 
         it('handles exception by setting errorMessage', function (): void {
-            $this->mockOpenAiException('API failed');
+            $this->mockChatStreamException('API failed');
 
             $messages = [
                 ['role' => 'user', 'content' => 'This will fail', 'timestamp' => now()->toIso8601String()],
@@ -357,21 +354,33 @@ describe('AiChatInterface', function (): void {
                 ->assertSet('streamingContent', '');
         });
 
-        it('uses custom model from mount', function (): void {
-            $this->mockOpenAiStreamSuccess('GPT-4o response');
+        it('includes context prompt in conversation history', function (): void {
+            $this->mockChatStreamSuccess('Context-aware response');
 
             $messages = [
-                ['role' => 'user', 'content' => 'Test', 'timestamp' => now()->toIso8601String()],
+                ['role' => 'user', 'content' => 'Help me', 'timestamp' => now()->toIso8601String()],
             ];
 
-            livewire(AiChatInterface::class, ['model' => 'gpt-4o'])
+            livewire(AiChatInterface::class, ['contextPrompt' => 'The user is editing a product description.'])
                 ->set('messages', $messages)
                 ->call('startStreaming')
-                ->assertSet('content', 'GPT-4o response');
+                ->assertCount('messages', 2)
+                ->assertSet('messages.1.role', 'assistant')
+                ->assertSet('messages.1.content', 'Context-aware response');
+        });
+
+        it('sets error message when no messages to process', function (): void {
+            ChatStreamAgent::fake([]);
+
+            livewire(AiChatInterface::class)
+                ->set('messages', [])
+                ->call('startStreaming')
+                ->assertSet('errorMessage', 'Failed to generate response. Please try again.')
+                ->assertSet('generating', false);
         });
 
         it('dispatches ai-content-generated event after streaming', function (): void {
-            $this->mockOpenAiStreamSuccess('Updated content');
+            $this->mockChatStreamSuccess('Updated content');
 
             $messages = [
                 ['role' => 'user', 'content' => 'Update', 'timestamp' => now()->toIso8601String()],
@@ -381,33 +390,6 @@ describe('AiChatInterface', function (): void {
                 ->set('messages', $messages)
                 ->call('startStreaming')
                 ->assertDispatched('ai-content-generated');
-        });
-
-        it('prepends contextPrompt as first user message in API call', function (): void {
-            $this->mockOpenAiStreamSuccess('Response with context');
-
-            $messages = [
-                ['role' => 'user', 'content' => 'Tell me more', 'timestamp' => now()->toIso8601String()],
-            ];
-
-            livewire(AiChatInterface::class, ['contextPrompt' => 'You are helping edit a product description.'])
-                ->set('messages', $messages)
-                ->call('startStreaming')
-                ->assertSet('content', 'Response with context');
-
-            // Verify contextPrompt was prepended as first user message
-            OpenAI::assertSent(Responses::class, function (string $method, array $params): bool {
-                if ($method !== 'createStreamed') {
-                    return false;
-                }
-
-                $input = $params['input'] ?? [];
-
-                // First message should be the contextPrompt
-                return isset($input[0])
-                    && $input[0]['role'] === 'user'
-                    && $input[0]['content'] === 'You are helping edit a product description.';
-            });
         });
     });
 });

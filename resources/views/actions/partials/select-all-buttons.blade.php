@@ -4,9 +4,10 @@
         color="primary"
         size="sm"
         x-on:click="
-      Object.keys($wire.mountedActions[0].data)
+      let idx = $wire.mountedActions.length - 1;
+      Object.keys($wire.mountedActions.at(-1).data)
         .filter(k => k.startsWith('field_'))
-        .forEach(k => $wire.set('mountedActions.0.data.' + k, true));
+        .forEach(k => $wire.set(`mountedActions.${idx}.data.${k}`, true));
     "
     >
         Select All
@@ -19,9 +20,10 @@
         color="primary"
         size="sm"
         x-on:click="
-      Object.keys($wire.mountedActions[0].data)
+      let idx = $wire.mountedActions.length - 1;
+      Object.keys($wire.mountedActions.at(-1).data)
         .filter(k => k.startsWith('field_'))
-        .forEach(k => $wire.set('mountedActions.0.data.' + k, false));
+        .forEach(k => $wire.set(`mountedActions.${idx}.data.${k}`, false));
     "
     >
         Deselect All

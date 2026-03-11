@@ -19,6 +19,7 @@ use Gwhthompson\FilamentAiForms\FilamentAiFormsServiceProvider;
 use Gwhthompson\FilamentAiForms\Tests\Fixtures\AdminPanelProvider;
 use Gwhthompson\FilamentAiForms\Tests\Fixtures\TestUser;
 use Illuminate\Foundation\Testing\LazilyRefreshDatabase;
+use Laravel\Ai\AiServiceProvider;
 use Livewire\Livewire;
 use Livewire\LivewireServiceProvider;
 use Orchestra\Testbench\TestCase as Orchestra;
@@ -78,6 +79,7 @@ abstract class TestCase extends Orchestra
             TablesServiceProvider::class,
             WidgetsServiceProvider::class,
             LaravelDataServiceProvider::class,
+            AiServiceProvider::class,
             FilamentAiFormsServiceProvider::class,
             AdminPanelProvider::class,
         ];
@@ -96,6 +98,9 @@ abstract class TestCase extends Orchestra
             'prefix' => '',
         ]);
 
+        // Use array cache driver (avoids needing a cache table in SQLite)
+        $app['config']->set('cache.default', 'array');
+
         // Auth provider configuration
         $app['config']->set('auth.providers.users.model', TestUser::class);
 
@@ -107,13 +112,9 @@ abstract class TestCase extends Orchestra
 
         // Load full package config
         $app['config']->set('filament-ai-forms', [
-            'model' => 'gpt-4.1-mini',
-            'temperature' => 0.7,
-            'max_output_tokens' => 16000,
-            'web_search' => [
-                'enabled' => false,
-                'country' => 'GB',
-                'context_size' => 'medium',
+            'agents' => [
+                'generation' => null,
+                'chat' => null,
             ],
             'logging' => [
                 'enabled' => true,

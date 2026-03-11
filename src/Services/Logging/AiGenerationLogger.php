@@ -70,14 +70,16 @@ class AiGenerationLogger
         $url = isset($context['url']) && is_string($context['url']) ? $context['url'] : 'N/A';
         $durationMs = round($result->duration * 1000);
 
+        $agentClass = $config->agentClass ?? 'default';
+
         return <<<MARKDOWN
         # AI Generation Log
 
         **Generated**: {$timestamp}
+        **Agent**: {$agentClass}
         **Model**: {$result->model}
         **Duration**: {$durationMs}ms
         **Fields Generated**: {$result->fieldsGenerated}
-        **Response ID**: {$result->responseId}
 
         ## Context
 

@@ -18,12 +18,10 @@ describe('AiGenerationResult', function (): void {
                 ->and($result->duration)->toBe(1.5)
                 ->and($result->model)->toBe('gpt-4.1-mini')
                 ->and($result->fieldsGenerated)->toBe(2)
-                ->and($result->responseId)->toBeNull()
                 ->and($result->logPath)->toBeNull()
                 ->and($result->schema)->toBeNull()
                 ->and($result->systemPrompt)->toBeNull()
-                ->and($result->userPrompt)->toBeNull()
-                ->and($result->rawResponse)->toBeNull();
+                ->and($result->userPrompt)->toBeNull();
         });
 
         it('creates with all optional fields', function (): void {
@@ -32,20 +30,16 @@ describe('AiGenerationResult', function (): void {
                 duration: 2.3,
                 model: 'gpt-4.1',
                 fieldsGenerated: 1,
-                responseId: 'resp_123',
                 logPath: '/logs/test.md',
                 schema: ['type' => 'object'],
                 systemPrompt: 'You are helpful',
                 userPrompt: 'Generate content',
-                rawResponse: ['output' => [['type' => 'message']]],
             );
 
-            expect($result->responseId)->toBe('resp_123')
-                ->and($result->logPath)->toBe('/logs/test.md')
+            expect($result->logPath)->toBe('/logs/test.md')
                 ->and($result->schema)->toBe(['type' => 'object'])
                 ->and($result->systemPrompt)->toBe('You are helpful')
-                ->and($result->userPrompt)->toBe('Generate content')
-                ->and($result->rawResponse)->toBe(['output' => [['type' => 'message']]]);
+                ->and($result->userPrompt)->toBe('Generate content');
         });
 
         it('creates from array using Data::from()', function (): void {
@@ -171,7 +165,6 @@ describe('AiGenerationResult', function (): void {
                 duration: 1.5,
                 model: 'gpt-4.1-mini',
                 fieldsGenerated: 1,
-                responseId: 'resp_123',
             );
 
             $array = $result->toArray();
@@ -181,8 +174,7 @@ describe('AiGenerationResult', function (): void {
                 ->and($array)->toHaveKey('duration', 1.5)
                 ->and($array)->toHaveKey('model', 'gpt-4.1-mini')
                 // camelCase property names are preserved (no MapOutputName on this class)
-                ->and($array)->toHaveKey('fieldsGenerated', 1)
-                ->and($array)->toHaveKey('responseId', 'resp_123');
+                ->and($array)->toHaveKey('fieldsGenerated', 1);
         });
     });
 });
